@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jeopardy – Admin</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { padding: 16px; max-width: 1300px; margin: 0 auto; }
+  #login { max-width: 340px; margin: 18vh auto; display: flex; flex-direction: column; gap: 12px; text-align: center; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .bar .sp { flex: 1; }
+  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h3 { margin-bottom: 10px; font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .cur .meta { color: var(--gold); font-weight: 800; text-transform: uppercase; }
+  .cur .q { font-size: 1.4rem; font-weight: 700; margin: 6px 0; }
+  .cur .a { color: var(--ok); font-weight: 800; font-size: 1.15rem; }
+  .cur .ctl { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .cur .who { margin-top: 10px; font-size: 1.3rem; font-weight: 800; color: var(--gold); }
+  .player { display: flex; align-items: center; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .player:last-child { border: 0; }
+  .player .nm { flex: 1; font-weight: 700; } .player .nm small { color: var(--muted); font-weight: 400; }
+  .player .sc { font-weight: 900; color: var(--gold); min-width: 3.5em; text-align: right; }
+  .player button { padding: .3em .55em; font-size: .85rem; }
+  .tabs button.active { background: var(--gold); color: #1a1400; }
+  .cat-ed { margin-bottom: 14px; }
+  .cat-ed .head { display: flex; gap: 8px; margin-bottom: 8px; }
+  .clue-ed { display: grid; grid-template-columns: 80px 1fr 1fr 34px; gap: 6px; margin-bottom: 6px; }
+  .clue-ed button { padding: 0; }
+  .clue-card { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin-bottom: 8px; background: #0b1340; }
+  .imgrow { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; font-size: .85rem; }
+  .imgrow img { height: 44px; border-radius: 6px; }
+  .media { margin: 10px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: #0b1340; }
+  .mrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .ytrow input[type=number] { width: 70px; }
+  .ytrow label { display: flex; gap: 4px; align-items: center; }
+  .imgrow label.btn { background: var(--blue); border-radius: 8px; padding: .3em .7em; cursor: pointer; font-weight: 600; }
+  .imgrow input[type=file] { display: none; }
+  .ed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); gap: 14px; }
+  @media (max-width: 600px) { .ed-grid { grid-template-columns: 1fr; } .clue-ed { grid-template-columns: 60px 1fr 34px; } .clue-ed input:nth-child(3) { grid-column: 2; } }
+  /* Mobil: kontrollknappene fast nederst, større trykkflater */
+  @media (max-width: 900px) {
+    body { padding-bottom: 130px; }
+    .cur .ctl { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; padding: 10px 12px 14px;
+      background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -6px 20px #000a; }
+    .cur .ctl button { flex: 1 1 28%; padding: .9em .4em; font-size: 1rem; }
+    .cur .ctl #bClose { flex-basis: 100%; }
+    .player button { padding: .6em .8em; font-size: 1rem; }
+    .bar h1 { font-size: 1.3rem !important; }
+    .board .cell { min-height: 52px; }
+  }
+  .roundbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .roundbar button.active { background: var(--gold); color: #1a1400; }
+  .roundbar .done { color: var(--ok); font-weight: 700; }
+  .btabs { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .btabs button.active { background: var(--gold); color: #1a1400; }
+  .btabs input { width: 180px; }
+  .board .cell { cursor: pointer; }
+  .board .cat { font-size: .8rem; min-height: 48px; }
+  .board .cell { min-height: 56px; font-size: 1.4rem; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ok); color: #04210f;
+    padding: 10px 18px; border-radius: 10px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="conn" hidden>Mistet forbindelsen – kobler til på nytt…</div>
+
+<form id="login" hidden>
+  <h1 class="logo" style="font-size:2.4rem">Jeopardy!</h1>
+  <div class="muted">Admin-innlogging</div>
+  <input id="pw" type="password" placeholder="Passord" autofocus>
+  <button class="gold" type="submit">Logg inn</button>
+  <div id="loginErr" style="color:#ff8b8b"></div>
+</form>
+
+<div id="app" hidden>
+  <div class="bar">
+    <h1 class="logo" style="font-size:1.8rem">Jeopardy! Admin</h1>
+    <div class="tabs">
+      <button id="tabGame" class="active">Spill</button>
+      <button id="tabEdit" class="ghost">Rediger brett</button>
+    </div>
+    <span class="sp"></span>
+    <a href="/display" target="_blank"><button class="ghost">Åpne storskjerm ↗</button></a>
+    <button id="logout" class="ghost">Logg ut</button>
+  </div>
+
+  <div id="viewGame" class="layout">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card cur" id="curCard"></div>
+      <div class="card"><h3>Brett</h3><div id="roundBar" class="roundbar"></div><div class="board" id="board"></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card" style="display:flex;gap:14px;align-items:center"><div class="qr" id="qr" style="flex:none;width:130px"></div><div><h3 style="margin-bottom:4px">Bli med</h3><div class="muted" style="font-size:.9rem">Spillerne skanner QR-koden med mobilkameraet.</div><div id="qrurl" style="margin-top:6px;word-break:break-all;font-weight:700"></div></div></div>
+      <div class="card"><h3>Spillere</h3><div id="players"></div>
+      </div>
+      <div class="card"><h3>Tid (sekunder, 0 = av)</h3>
+        <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center">
+          <label for="tBuzz">Tid til å buzze</label><input id="tBuzz" type="number" min="0" max="120">
+          <label for="tAns">Tid til å svare</label><input id="tAns" type="number" min="0" max="120">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center;margin-top:10px">
+          <label for="tDbl">⭐ Dobbel-ruter per brett (0–5)</label><input id="tDbl" type="number" min="0" max="5"></div>
+        <div class="muted" style="font-size:.8rem;margin-top:4px">Skjulte ruter som gir dobbel poengsum (også minus). Plasseres tilfeldig; velg antall <i>før</i> dere starter.</div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:.9rem"><input id="chFirst" type="checkbox" style="width:auto">Laget som valgte ruten svarer først (husregel)</label>
+        <div class="muted" style="font-size:.8rem">Av = vanlige regler: alle kan buzze, feil gir minus, og andre kan stjele poengene.</div>
+        <div class="muted" style="margin-top:8px;font-size:.8rem">Snarveier: <b>Mellomrom</b> åpne buzzer · <b>R</b> riktig · <b>F</b> feil · <b>V</b> vis svar · <b>Esc</b> lukk</div>
+      </div>
+      <div class="card"><h3>Musikk</h3>
+        <div class="muted" style="font-size:.8rem;margin-bottom:8px">Last opp egne lydfiler (mp3, ogg, wav, m4a). Spilles på storskjermen når lyden er slått på der.</div>
+        <div id="music"></div>
+      </div>
+      <div class="card"><h3>Får ikke mobilen kontakt?</h3>
+        <button class="ghost" id="diagBtn">Vis nettverkstips</button>
+        <div id="diag" hidden style="margin-top:10px;font-size:.9rem"></div>
+      </div>
+      <div class="card"><h3>Spill</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="gold" id="startBtn"></button>
+          <button class="ghost" id="resetBoard">Nullstill brett</button>
+          <button class="ghost" id="resetAll">Nullstill alt (inkl. poeng)</button>
+        </div></div>
+    </div>
+  </div>
+
+  <div id="viewEdit" hidden>
+    <div class="bar">
+      <button id="addCat" class="ghost">+ Kategori</button>
+      <button id="saveBoard" class="gold">Lagre brett</button>
+      <button id="exportBoard" class="ghost">Eksporter JSON</button>
+      <label class="btn ghost" style="border:1px solid var(--line);border-radius:10px;padding:.6em 1em;cursor:pointer;color:var(--muted);font-weight:600">Importer JSON
+        <input id="importBoard" type="file" accept="application/json,.json" hidden></label>
+      <span class="muted">Lagring nullstiller spillet (brukte ruter).</span>
+    </div>
+    <div class="btabs" id="boardTabs"></div>
+    <div class="ed-grid" id="editor"></div>
+  </div>
+</div>
+<div id="toast" hidden></div>
+
+<script src="/common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const refreshJoin = () => loadJoin().then(j => { $('qr').innerHTML = j.svg; $('qrurl').textContent = j.url; }).catch(() => {});
+refreshJoin(); setInterval(refreshJoin, 30000); // følger med hvis PC-en bytter nettverk
+let state = null, conn = null, all = null, edIdx = 0;
+const curEd = () => all.boards[edIdx];
+
+const toast = t => { const el = $('toast'); el.textContent = t; el.hidden = false; setTimeout(() => el.hidden = true, 2000); };
+const act = (action, extra = {}) => conn.send({ type: 'admin', action, ...extra });
+
+async function init() {
+  const { admin } = await (await fetch('/api/me')).json();
+  if (!admin) { $('login').hidden = false; return; }
+  $('login').hidden = true; $('app').hidden = false;
+  conn = connect(() => ({ role: 'admin' }), msg => {
+    if (msg.type === 'unauthorized') { location.reload(); }
+    if (msg.type === 'state' && msg.state.isAdmin) { state = msg.state; render(); }
+  });
+}
+
+$('login').onsubmit = async e => {
+  e.preventDefault();
+  const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: $('pw').value }) });
+  if (r.ok) location.reload(); else $('loginErr').textContent = 'Feil passord';
+};
+$('logout').onclick = async () => { await fetch('/api/logout', { method: 'POST' }); location.reload(); };
+
+// Faner
+function tab(edit) {
+  $('viewGame').hidden = edit; $('viewEdit').hidden = !edit;
+  $('tabGame').className = edit ? 'ghost' : 'active'; $('tabEdit').className = edit ? 'active' : 'ghost';
+  if (edit && state) { all = JSON.parse(JSON.stringify(state.fullBoard)); edIdx = Math.min(state.round, all.boards.length - 1); renderEditor(); }
+}
+$('tabGame').onclick = () => tab(false);
+$('tabEdit').onclick = () => tab(true);
+
+const AUDIO_MIME = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4' };
+function renderMusic() {
+  const slots = [['lobby', 'Lobby-musikk', 'spilles i hovedmenyen'], ['think', 'Tenkemusikk', 'spilles mens buzzerne er åpne']];
+  $('music').innerHTML = slots.map(([slot, title, hint]) => `
+    <div style="margin-bottom:10px"><div style="font-weight:700">${title} <span class="muted" style="font-weight:400;font-size:.8rem">– ${hint}</span></div>
+      <div class="imgrow">${state.audio[slot] ? `<audio controls preload="none" src="${esc(state.audio[slot])}" style="height:32px;max-width:190px"></audio><button class="ghost" data-rm-audio="${slot}">Fjern</button>` : '<span class="muted">Ingen fil</span>'}
+        <label class="btn">${state.audio[slot] ? 'Bytt' : 'Last opp'}<input type="file" accept="audio/*,.mp3,.ogg,.wav,.m4a" data-audio="${slot}"></label></div></div>`).join('');
+  $('music').querySelectorAll('[data-audio]').forEach(el => el.onchange = async () => {
+    const f = el.files[0]; if (!f) return;
+    const ext = f.name.split('.').pop().toLowerCase();
+    const r = await fetch('/api/audio/' + el.dataset.audio, { method: 'POST', headers: { 'Content-Type': AUDIO_MIME[ext] || f.type }, body: f });
+    toast(r.ok ? 'Musikk lagret' : ((await r.json().catch(() => ({}))).error || 'Opplasting feilet'));
+  });
+  $('music').querySelectorAll('[data-rm-audio]').forEach(el => el.onclick = async () => {
+    await fetch('/api/audio/' + el.dataset.rmAudio, { method: 'DELETE' });
+  });
+}
+
+const sendTimers = () => act('setTimers', { buzzSecs: $('tBuzz').value, answerSecs: $('tAns').value, chooserFirst: $('chFirst').checked, doubles: $('tDbl').value });
+$('tBuzz').onchange = sendTimers; $('tAns').onchange = sendTimers; $('tDbl').onchange = sendTimers; $('chFirst').onchange = sendTimers;
+
+$('diagBtn').onclick = async () => {
+  const box = $('diag');
+  if (!box.hidden) { box.hidden = true; return; }
+  const d = await (await fetch('/api/diag')).json();
+  box.innerHTML = `<div>Mobilen må åpne en av disse adressene (samme Wi-Fi som PC-en):</div>
+    ${d.candidates.map(c => `<div style="margin:4px 0"><b>${esc(c.url)}</b> <span class="muted">${esc(c.iface)}${c.virtual ? ' (virtuelt, trolig feil)' : ''}</span></div>`).join('') || '<div class="muted">Fant ingen nettverkskort.</div>'}
+    <div style="margin-top:8px">QR-koden bruker nå: <b>${esc(d.current)}</b></div>
+    <ol style="padding-left:18px;margin:10px 0 0">
+      <li>Skriv adressen manuelt i mobilnettleseren. Virker den, er det bare QR-koden som er feil adresse.</li>
+      <li>Virker den ikke, blokkerer ruteren trolig kommunikasjon mellom enheter (<i>klientisolasjon</i> / gjestenett). Slå det av i ruteren, eller:</li>
+      <li>Bruk <b>Windows Mobil-hotspot</b> (Innstillinger → Nettverk → Mobil-hotspot). Koble mobilene til PC-ens hotspot, og last siden på nytt.</li>
+      <li>Mobildata må være av, og nettverket på PC-en bør stå som «Privat».</li>
+    </ol>`;
+  box.hidden = false;
+};
+
+// Tastatursnarveier
+document.addEventListener('keydown', e => {
+  if (!state || !state.current || /INPUT|TEXTAREA/.test(document.activeElement.tagName) || !$('viewEdit').hidden) return;
+  const k = e.key.toLowerCase(), cur = state.current;
+  if (k === ' ' && (cur.phase === 'read' || cur.phase === 'answering')) act('open');
+  else if (k === 'r' && cur.answering) act('correct', { who: cur.answering });
+  else if (k === 'f' && cur.answering) act('wrong', { who: cur.answering });
+  else if (k === 'v') act('reveal');
+  else if (k === 'escape') act('close');
+  else return;
+  e.preventDefault();
+});
+
+$('resetBoard').onclick = () => confirm('Nullstille brettet (poeng beholdes)?') && act('resetBoard');
+$('resetAll').onclick = () => confirm('Nullstille brett OG alle poeng?') && act('resetAll');
+
+function render() {
+  const s = state;
+
+  for (const [id, v] of [['tBuzz', s.settings.buzzSecs], ['tAns', s.settings.answerSecs], ['tDbl', s.settings.doubles]])
+    if (document.activeElement !== $(id)) $(id).value = v;
+  $('chFirst').checked = !!s.settings.chooserFirst;
+  const mk = JSON.stringify(s.audio);
+  if (mk !== window.__audioKey && !$('music').contains(document.activeElement)) { window.__audioKey = mk; renderMusic(); }
+  const sb = $('startBtn');
+  sb.textContent = s.started ? '↩ Tilbake til lobby' : '▶ Start spillet';
+  sb.disabled = s.started && !!s.current;
+  sb.onclick = () => act(s.started ? 'lobby' : 'start');
+
+  // Bytte av brett
+  const rb = $('roundBar');
+  rb.hidden = s.rounds.length < 2;
+  rb.innerHTML = `<button class="${s.roundDone ? 'gold' : 'ghost'}" id="flipBtn" ${s.current ? 'disabled' : ''}>🔄 Flipp brett</button>` + s.rounds.map((n, i) => `<button class="${i === s.round ? 'active' : 'ghost'}" data-round="${i}" ${s.current || i === s.round ? 'disabled' : ''}>${esc(n)}</button>`).join('') +
+    (s.roundDone ? '<span class="done">✔ Brettet er ferdig – trykk «Flipp brett»</span>' : '');
+  $('flipBtn').onclick = () => act('flip');
+  rb.querySelectorAll('[data-round]').forEach(el => el.onclick = () => act('setRound', { round: +el.dataset.round }));
+
+  // Brett
+  const cols = s.board.length, rows = Math.max(...s.board.map(c => c.clues.length));
+  const b = $('board'); b.style.setProperty('--cols', cols);
+  let h = s.board.map(c => `<div class="cat">${esc(c.name)}</div>`).join('');
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const cl = s.board[c].clues[r];
+    h += cl ? `<button class="cell ${s.used[c + '-' + r] ? 'used' : ''}" data-c="${c}" data-r="${r}" ${s.current || !s.started ? 'disabled' : ''}>${cl.value}${(s.doubles || []).includes(c + '-' + r) && !s.used[c + '-' + r] ? ' ⭐' : ''}</button>` : '<div></div>';
+  }
+  b.innerHTML = h;
+  b.querySelectorAll('.cell').forEach(el => el.onclick = () => act('select', { c: +el.dataset.c, r: +el.dataset.r }));
+
+  // Spillere
+  $('players').innerHTML = s.players.length ? s.players.map(p => `
+    <div class="player">
+      <div class="nm">${p.id === s.chooser ? '🎯 ' : ''}${esc(p.name)} ${p.connected ? '' : '<small>(frakoblet)</small>'}</div>
+      <div class="sc">${p.score}</div>
+      <button class="ghost" data-a="adjust" data-id="${p.id}" data-d="-100">−100</button>
+      <button class="ghost" data-a="adjust" data-id="${p.id}" data-d="100">+100</button>
+      <button class="ghost" data-a="setChooser" data-id="${p.id}" title="Gi valgretten">🎯</button>
+      <button class="ghost" data-a="kick" data-id="${p.id}" title="Fjern">✕</button>
+    </div>`).join('') : '<div class="muted">Ingen spillere har blitt med ennå.</div>';
+  $('players').querySelectorAll('button').forEach(el => el.onclick = () => {
+    if (el.dataset.a === 'kick' && !confirm('Fjerne spilleren?')) return;
+    act(el.dataset.a, { id: el.dataset.id, delta: +el.dataset.d });
+  });
+
+  // Aktivt spørsmål
+  const cur = s.current, card = $('curCard');
+  if (!cur) {
+    const ch = s.players.find(p => p.id === s.chooser);
+    card.innerHTML = `<h3>Aktivt spørsmål</h3><div class="muted">${s.started ? 'Velg en rute på brettet.' : 'Spillet er i lobbyen. Trykk «Start spillet» når alle har blitt med.'}${ch ? ` <b>${esc(ch.name)}</b> har valgretten.` : ''}</div>`;
+    return;
+  }
+  const who = s.players.find(p => p.id === cur.answering);
+  const phaseTxt = { read: 'Les opp spørsmålet, trykk «Åpne buzzer» når klar', open: 'Buzzerne er åpne – venter på buzz…',
+    answering: cur.first ? 'Laget som valgte ruten svarer først. «Åpne buzzer» hopper over dem.' : 'Spiller har buzzet', revealed: 'Svar vist' }[cur.phase];
+  card.innerHTML = `<h3>Aktivt spørsmål</h3>
+    <div class="meta">${esc(cur.category)} · ${cur.value}${cur.double ? ' · <b style="color:var(--gold)">⭐ DOBBEL POENGSUM ×2</b>' : ''}</div>
+    <div class="q">${esc(cur.q)}</div>${imgTag(cur.img)}
+    <div class="a">Svar: ${esc(cur.a)}</div>${imgTag(cur.aImg)}
+    ${cur.yt ? `<div class="media"><b>🎵 YouTube</b>
+      ${cur.media.error ? '<span style="color:#ff8b8b">⚠ Kan ikke spilles (kode ' + cur.media.error + '): privat/ikke tillatt innebygd, eller storskjermen mangler internett</span>'
+        : cur.media.playing ? '<span style="color:var(--ok)">spilles på storskjermen…</span>' : '<span class="muted">pauset</span>'}
+      ${cur.media.status ? ' <span class="muted">· storskjerm: ' + ({ ready: 'spilleren er klar', notready: 'spilleren laster (trenger internett)', cued: 'klar', unstarted: 'ikke startet', buffering: 'laster video…', playing: 'spiller ✔', paused: 'pauset', ended: 'ferdig', soundoff: '<b style="color:#ffcc33">⚠ lyd er ikke slått på (trykk «Slå på lyd» på storskjermen)</b>', blocked: '<b style="color:#ffcc33">⚠ nettleseren blokkerer lyden – trykk på «▶ Trykk her»-knappen på storskjermen</b>' }[cur.media.status] || esc(cur.media.status)) + '</span>' : ''}
+      <div class="mrow"><button id="mPlay">▶ Spill</button><button id="mPause" class="ghost">⏸ Pause</button><button id="mRestart" class="ghost">⟲ Fra start</button></div>
+      <div class="muted" style="font-size:.8rem">Storskjermen må ha lyd på (🔇-knappen øverst til høyre) og internett. Musikken pauses når noen buzzer.</div></div>` : ''}
+    <div class="muted" style="margin-top:8px">${phaseTxt}</div>
+    ${who ? `<div class="who">${cur.first ? '🎯' : '🔔'} ${esc(who.name)} svarer${cur.first ? ' først (valgte ruten)' : ''}</div>` : ''}
+    <div class="ctl">
+      <button class="gold" id="bOpen" ${cur.phase === 'read' || cur.phase === 'answering' ? '' : 'disabled'}>Åpne buzzer</button>
+      <button class="ok" id="bCorrect" ${cur.answering ? '' : 'disabled'}>✔ Riktig</button>
+      <button class="bad" id="bWrong" ${cur.answering ? '' : 'disabled'}>✘ Feil</button>
+      <button id="bReveal" ${cur.phase === 'revealed' ? 'disabled' : ''}>Vis svar</button>
+      <button class="${cur.phase === 'revealed' ? 'gold' : 'ghost'}" id="bClose">${cur.phase === 'revealed' ? 'Neste spørsmål → (tilbake til brett)' : 'Lukk og tilbake til brett'}</button>
+    </div>`;
+  $('bOpen').onclick = () => act('open');
+  if (cur.yt) { $('mPlay').onclick = () => act('mediaPlay'); $('mPause').onclick = () => act('mediaPause'); $('mRestart').onclick = () => act('mediaRestart'); }
+  $('bCorrect').onclick = () => act('correct', { who: cur.answering });
+  $('bWrong').onclick = () => act('wrong', { who: cur.answering });
+  $('bReveal').onclick = () => act('reveal');
+  $('bClose').onclick = () => act('close');
+}
+
+// Redigering
+function renderBoardTabs() {
+  const bs = all.boards;
+  $('boardTabs').innerHTML = bs.map((b, i) => `<button class="${i === edIdx ? 'active' : 'ghost'}" data-bt="${i}">${esc(b.name || 'Brett ' + (i + 1))}</button>`).join('') +
+    (bs.length < 6 ? '<button class="ghost" id="addBoard">+ Nytt brett</button>' : '') +
+    `<input id="boardName" value="${esc(curEd().name)}" placeholder="Navn på brett" aria-label="Navn på brett">` +
+    (bs.length > 1 ? '<button class="ghost" id="delBoard">🗑 Slett dette brettet</button>' : '');
+  $('boardTabs').querySelectorAll('[data-bt]').forEach(el => el.onclick = () => { edIdx = +el.dataset.bt; renderEditor(); });
+  $('boardName').oninput = e => { curEd().name = e.target.value; $('boardTabs').querySelector('.active').textContent = e.target.value || 'Brett ' + (edIdx + 1); };
+  const ab = $('addBoard');
+  if (ab) ab.onclick = () => {
+    all.boards.push({ name: 'Brett ' + (bs.length + 1), categories: [{ name: 'Ny kategori', clues: [100, 200, 300, 400, 500].map(value => ({ value, q: '', a: '', img: '', aImg: '' })) }] });
+    edIdx = all.boards.length - 1; renderEditor();
+  };
+  const db = $('delBoard');
+  if (db) db.onclick = () => { if (confirm('Slette «' + curEd().name + '» og alle spørsmålene i det?')) { all.boards.splice(edIdx, 1); edIdx = Math.max(0, edIdx - 1); renderEditor(); } };
+}
+function renderEditor() {
+  renderBoardTabs();
+  $('editor').innerHTML = curEd().categories.map((cat, ci) => `
+    <div class="card cat-ed">
+      <div class="head"><input data-ci="${ci}" data-f="name" value="${esc(cat.name)}" placeholder="Kategorinavn" style="font-weight:800">
+        <button class="ghost" data-del-cat="${ci}" title="Slett kategori">🗑</button></div>
+      ${cat.clues.map((cl, ki) => `
+        <div class="clue-card">
+          <div class="clue-ed" style="margin:0">
+            <input data-ci="${ci}" data-ki="${ki}" data-f="value" type="number" value="${esc(cl.value)}">
+            <input data-ci="${ci}" data-ki="${ki}" data-f="q" value="${esc(cl.q)}" placeholder="Spørsmål">
+            <input data-ci="${ci}" data-ki="${ki}" data-f="a" value="${esc(cl.a)}" placeholder="Svar">
+            <button class="ghost" data-del-clue="${ci}:${ki}">✕</button>
+          </div>
+          ${['img', 'aImg'].map(f => `<div class="imgrow"><span class="muted">${f === 'img' ? 'Bilde i spørsmål' : 'Bilde i svar'}:</span>
+            ${cl[f] ? `<img src="/uploads/${esc(cl[f])}"><button class="ghost" data-rm-img="${ci}:${ki}:${f}">Fjern</button>` : ''}
+            <label class="btn">${cl[f] ? 'Bytt' : 'Last opp'}<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" data-up="${ci}:${ki}:${f}"></label></div>`).join('')}
+          <div class="imgrow ytrow"><span class="muted">🎵 YouTube:</span>
+            <input data-ci="${ci}" data-ki="${ki}" data-f="yt" value="${esc(/^[\w-]{11}$/.test(cl.yt || '') ? 'https://youtu.be/' + cl.yt : cl.yt || '')}" placeholder="Lim inn lenke til video/sang" style="flex:1;min-width:200px">
+            <label>start <input type="number" min="0" data-ci="${ci}" data-ki="${ki}" data-f="ytStart" value="${esc(cl.ytStart || '')}" placeholder="0"> s</label>
+            <label>slutt <input type="number" min="0" data-ci="${ci}" data-ki="${ki}" data-f="ytEnd" value="${esc(cl.ytEnd || '')}" placeholder="–"> s</label>
+            <label><input type="checkbox" style="width:auto" data-ci="${ci}" data-ki="${ki}" data-f="ytHide" ${cl.ytHide ? 'checked' : ''}> skjul videoen til svaret vises</label></div>
+        </div>`).join('')}
+      <button class="ghost" data-add-clue="${ci}">+ Rute</button>
+    </div>`).join('');
+  const ed = $('editor');
+  ed.querySelectorAll('input').forEach(el => el.oninput = () => {
+    const { ci, ki, f } = el.dataset;
+    if (ki === undefined) curEd().categories[ci][f] = el.value;
+    else curEd().categories[ci].clues[ki][f] = el.type === 'checkbox' ? el.checked : f === 'value' ? Number(el.value) : el.value;
+  });
+  ed.querySelectorAll('[data-up]').forEach(el => el.onchange = async () => {
+    const [ci, ki, f] = el.dataset.up.split(':'), file = el.files[0];
+    if (!file) return;
+    const r = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+    if (!r.ok) return toast('Opplasting feilet (png/jpg/gif/webp, maks 10 MB)');
+    curEd().categories[ci].clues[ki][f] = (await r.json()).name; renderEditor();
+  });
+  ed.querySelectorAll('[data-rm-img]').forEach(el => el.onclick = () => {
+    const [ci, ki, f] = el.dataset.rmImg.split(':'); curEd().categories[ci].clues[ki][f] = ''; renderEditor(); });
+  ed.querySelectorAll('[data-del-cat]').forEach(el => el.onclick = () => { curEd().categories.splice(+el.dataset.delCat, 1); renderEditor(); });
+  ed.querySelectorAll('[data-del-clue]').forEach(el => el.onclick = () => {
+    const [ci, ki] = el.dataset.delClue.split(':'); curEd().categories[ci].clues.splice(ki, 1); renderEditor(); });
+  ed.querySelectorAll('[data-add-clue]').forEach(el => el.onclick = () => {
+    const cl = curEd().categories[+el.dataset.addClue].clues;
+    cl.push({ value: (cl.at(-1)?.value || 0) + 100, q: '', a: '', img: '', aImg: '' }); renderEditor(); });
+}
+$('addCat').onclick = () => {
+  curEd().categories.push({ name: 'Ny kategori', clues: [100, 200, 300, 400, 500].map(value => ({ value, q: '', a: '', img: '', aImg: '' })) });
+  renderEditor();
+};
+$('saveBoard').onclick = async () => {
+  const used = Object.keys(state.used).length;
+  if (used && !confirm(`Lagring nullstiller spillet (${used} brukte ruter). Fortsette?`)) return;
+  const r = await fetch('/api/board', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(all) });
+  if (r.ok) { toast('Brett lagret'); tab(false); }
+  else alert('Kunne ikke lagre:\n' + ((await r.json().catch(() => ({}))).error || r.status));
+};
+
+$('exportBoard').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' }));
+  a.download = 'jeopardy-brett.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+$('importBoard').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const b = JSON.parse(await f.text());
+    const list = Array.isArray(b.boards) ? b.boards : Array.isArray(b.categories) ? [{ name: 'Brett 1', categories: b.categories }] : null;
+    if (!list || !list.length) throw new Error();
+    all = { boards: list.map((bd, i) => ({ name: String(bd.name || 'Brett ' + (i + 1)), categories: bd.categories.map(c => ({
+      name: String(c.name ?? ''), clues: (c.clues || []).map(k => ({
+        value: Number(k.value) || 0, q: String(k.q ?? ''), a: String(k.a ?? ''), img: k.img || '', aImg: k.aImg || '',
+        yt: k.yt || '', ytStart: k.ytStart || '', ytEnd: k.ytEnd || '', ytHide: !!k.ytHide })) })) })) };
+    edIdx = 0; renderEditor(); toast('Importert – husk å trykke «Lagre brett»');
+  } catch { alert('Filen er ikke et gyldig brett.'); }
+};
+
+init();
+</script>
+</body>
+</html>

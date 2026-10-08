@@ -1,0 +1,23 @@
+{
+  "name": "jeopardy",
+  "version": "1.0.0",
+  "description": "Jeopardy-spill for lokalt nettverk: admin, storskjerm og mobil-buzzere",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node server.js",
+    "load": "node test/load.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

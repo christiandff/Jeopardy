@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jeopardy – Storskjerm</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { padding: 18px; display: flex; flex-direction: column; gap: 16px; height: 100vh; }
+  [hidden] { display: none !important; }
+  #lobby { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4vh; text-align: center; }
+  .logo.big { font-size: clamp(3rem, 9vw, 8rem); }
+  .join { display: flex; gap: 40px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .qr-big { width: min(32vh, 300px); } .jtxt .h { font-size: 2.2rem; font-weight: 900; }
+  .teams { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 1200px; }
+  .teams .t { background: var(--panel); border: 2px solid var(--line); border-radius: 99px; padding: 10px 24px; font-size: 1.6rem; font-weight: 800; animation: pop .3s; }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+  .footer { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; min-height: 52px; }
+  .footer .score { display: flex; gap: 14px; align-items: baseline; padding: 8px 18px; min-width: 0; }
+  .footer .score .v { font-size: 1.5rem; }
+  header { text-align: center; } header .logo { font-size: 2.4rem; }
+  .board { flex: 1; grid-auto-rows: 1fr; }
+  .board .cell { font-size: clamp(1.6rem, 4.5vw, 4rem); }
+  #overlay { position: fixed; inset: 0; background: var(--blue); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 5vw; gap: 3vh; z-index: 10; }
+  #overlay .meta { color: var(--gold); font-weight: 900; font-size: 2rem; text-transform: uppercase; letter-spacing: .1em; }
+  #overlay .q { font-size: clamp(2rem, 5vw, 4.5rem); font-weight: 800; max-width: 1400px; line-height: 1.15;
+    text-shadow: 2px 2px 0 #000; text-transform: uppercase; }
+  #overlay .a { font-size: clamp(1.6rem, 4vw, 3.5rem); color: var(--ok); font-weight: 900; }
+  #overlay .who { font-size: 2.4rem; font-weight: 900; padding: .3em .8em; border-radius: 14px; background: var(--gold); color: #1a1400; }
+  .qrbox { position: fixed; left: 12px; top: 12px; z-index: 5; opacity: .85; }
+  .qrbox .qr { width: 64px; padding: 4px; border-radius: 6px; }
+  #overlay .clue-img { max-height: 40vh; }
+  .tbar { width: min(70vw, 900px); height: 18px; background: #0a1030; border-radius: 99px; overflow: hidden; }
+  .tbar i { display: block; height: 100%; background: var(--gold); width: 100%; }
+  .tbar.low i { background: var(--bad); }
+  .tnum { font-size: 2rem; font-weight: 900; color: var(--gold); }
+  #sound { position: fixed; top: 10px; right: 10px; z-index: 20; padding: .4em .8em; font-size: .9rem; opacity: .7; }
+  #yt { position: fixed; z-index: 12; right: 24px; top: 24px; width: 320px; height: 180px; border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 8px 30px #000a; }
+  #ytTap { position: fixed; z-index: 30; left: 50%; bottom: 40px; transform: translateX(-50%); font-size: 1.6rem; padding: .8em 1.6em; background: var(--gold); color: #1a1400; box-shadow: 0 8px 30px #000a; }
+  #yt.big { left: 50%; right: auto; top: auto; bottom: 100px; transform: translateX(-50%); width: min(480px, 50vw); height: calc(min(480px, 50vw) * 9 / 16); }
+  #overlay.padyt { padding-bottom: calc(min(480px, 50vw) * 9 / 16 + 130px); }
+  #yt iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+  .ytmask { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; font-size: 4rem;
+    background: linear-gradient(135deg, #0b1340, #1b2f9c); }
+  #yt.masked .ytmask { display: flex; }
+  .ytmask span { animation: bob .8s ease-in-out infinite alternate; }
+  @keyframes bob { to { transform: translateY(-12px) scale(1.12); } }
+  .dd { font-size: clamp(1.6rem, 4vw, 3.2rem); font-weight: 900; color: #1a1400; background: var(--gold); padding: .25em 1.2em; border-radius: 99px;
+    letter-spacing: .06em; text-transform: uppercase; animation: ddpop .6s ease-out; box-shadow: 0 0 40px #ffcc3388; }
+  @keyframes ddpop { from { transform: scale(.3) rotate(-8deg); opacity: 0; } 60% { transform: scale(1.15) rotate(2deg); } }
+  #overlay .hint { font-size: 1.6rem; color: var(--muted); }
+  #overlay .scores { position: absolute; bottom: 20px; left: 20px; right: 20px; justify-content: center; }
+</style>
+</head>
+<body>
+<div id="conn" hidden>Mistet forbindelsen…</div>
+<div id="lobby" hidden>
+  <h1 class="logo big">Jeopardy!</h1>
+  <div class="join">
+    <div class="qr qr-big" id="qrBig"></div>
+    <div class="jtxt"><div class="h">Skann for å bli med</div><div class="muted" id="qrurlBig"></div>
+      <div class="muted" style="margin-top:14px" id="lobbyCount"></div></div>
+  </div>
+  <div class="teams" id="teams"></div>
+</div>
+<div id="gameView" hidden style="display:flex;flex-direction:column;gap:16px;flex:1;min-height:0">
+  <header><h1 class="logo">Jeopardy!</h1><div class="muted" id="roundName" style="font-weight:700;letter-spacing:.1em;text-transform:uppercase"></div></header>
+  <div class="board static" id="board"></div>
+</div>
+<div class="footer" id="scores"></div>
+<div class="qrbox" id="qrbox" hidden title="Skann for å bli med"><div class="qr" id="qr"></div></div>
+<div id="overlay" hidden></div>
+<div id="yt" hidden><div id="ytplayer"></div><div class="ytmask"><span>🎵</span></div></div>
+<button id="ytTap" hidden>▶ Trykk her for å starte lyden</button>
+<button id="sound" class="ghost">🔇 Slå på lyd</button>
+
+<script src="/common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const refreshJoin = () => loadJoin().then(j => { for (const id of ['qr', 'qrBig']) $(id).innerHTML = j.svg; $('qrurlBig').textContent = j.url; }).catch(() => {});
+refreshJoin(); setInterval(refreshJoin, 30000); // følger med hvis PC-en bytter nettverk
+const scoresInner = s => s.players.map(p => `
+  <div class="score ${p.id === s.chooser ? 'chooser' : ''} ${s.current?.answering === p.id ? 'answering' : ''} ${p.connected ? '' : 'off'}">
+    <div class="n">${esc(p.name)}</div><div class="v ${p.score < 0 ? 'neg' : ''}">${p.score}</div></div>`).join('') || '<span class="muted">Ingen lag ennå</span>';
+const scoresHtml = s => `<div class="scores">${scoresInner(s)}</div>`;
+
+// ----- Lyd (WebAudio, ingen filer) -----
+let lastState = null, actx = null, lastSeq = null, deadlineAt = null, totalSecs = 0;
+const SOUNDS = {
+  buzz: [[880, .12], [1320, .18]],
+  correct: [[660, .12], [880, .12], [1320, .3]],
+  wrong: [[220, .25], [165, .45]],
+  timeout: [[330, .2], [330, .2], [220, .5]],
+  double: [[523, .1], [659, .1], [784, .1], [1047, .12], [784, .1], [1047, .4]],
+};
+function play(type) {
+  if (!actx) return;
+  let t = actx.currentTime;
+  for (const [freq, dur] of SOUNDS[type] || []) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type === 'wrong' || type === 'timeout' ? 'sawtooth' : 'triangle';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(.2, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur); t += dur;
+  }
+}
+$('sound').onclick = () => {
+  if (actx) { actx.close(); actx = null; $('sound').textContent = '🔇 Slå på lyd'; if (lastState) syncMusic(lastState); return; }
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  $('sound').textContent = '🔊 Lyd på'; play('buzz');
+  if (lastState) { syncMusic(lastState); syncYT(lastState); }
+};
+
+// ----- Musikk (egne filer lastet opp i admin) -----
+const music = {};
+let wantMusic = null;
+function syncMusic(s) {
+  const want = !s.started ? 'lobby' : (s.current && s.current.phase === 'open' && !s.current.hasYt ? 'think' : null);
+  for (const slot of ['lobby', 'think']) {
+    const url = s.audio && s.audio[slot];
+    if (!url) { if (music[slot]) { music[slot].pause(); delete music[slot]; } continue; }
+    if (!music[slot] || music[slot].dataset.url !== url) {
+      if (music[slot]) music[slot].pause();
+      const a = music[slot] = new Audio(url); a.loop = true; a.volume = 0.5; a.dataset.url = url;
+    }
+  }
+  if (want !== wantMusic) {
+    // «think» starter alltid fra begynnelsen; lobby fortsetter der den slapp
+    if (want === 'think' && music.think) music.think.currentTime = 0;
+    wantMusic = want;
+  }
+  for (const [slot, a] of Object.entries(music)) {
+    if (slot === wantMusic && actx) a.play().catch(() => {}); else a.pause();
+  }
+}
+
+// ----- YouTube (spilles kun her på storskjermen; trenger internett og «Slå på lyd») -----
+let ytPlayer = null, ytPlayerReady = false, ytApiReady = false, ytKey = null, ytNonce = 0;
+function loadYTApi() {
+  if (document.getElementById('ytapi')) return;
+  const sc = document.createElement('script'); sc.id = 'ytapi'; sc.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(sc);
+}
+window.onYouTubeIframeAPIReady = () => { ytApiReady = true; if (lastState) syncYT(lastState); };
+const ytParams = cur => ({ videoId: cur.yt.id, startSeconds: cur.yt.start || 0, ...(cur.yt.end ? { endSeconds: cur.yt.end } : {}) });
+let ytStatusSent = null, ytBlockTimer = null;
+function ytStatus(st) { if (st !== ytStatusSent) { ytStatusSent = st; conn.send({ type: 'display', action: 'ytStatus', status: st }); } }
+const YT_NAMES = { '-1': 'unstarted', 0: 'ended', 1: 'playing', 2: 'paused', 3: 'buffering', 5: 'cued' };
+function startYT() {
+  try { ytPlayer.unMute(); ytPlayer.setVolume(100); } catch {}
+  ytPlayer.playVideo();
+  clearTimeout(ytBlockTimer);
+  // Spiller den ikke etter et par sekunder, har nettleseren blokkert lyden: be om ett klikk
+  ytBlockTimer = setTimeout(() => {
+    const st = ytPlayer.getPlayerState();
+    if (lastState && lastState.current && lastState.current.media.playing && st !== 1 && st !== 3) { ytStatus('blocked'); $('ytTap').hidden = false; }
+  }, 2500);
+}
+$('ytTap').onclick = () => { $('ytTap').hidden = true; ytStatusSent = null; startYT(); };
+
+function syncYT(s) {
+  const cur = s.current, box = $('yt');
+  if (!s.started || !cur || !cur.yt) {
+    box.hidden = true;
+    if (ytPlayerReady && ytKey) { try { ytPlayer.stopVideo(); } catch {} }
+    ytKey = null; $('ytTap').hidden = true; ytStatusSent = null; return;
+  }
+  box.hidden = false;
+  box.classList.toggle('masked', cur.yt.hide && cur.phase !== 'revealed');
+  box.classList.toggle('big', !cur.q && !cur.img);
+  if (!ytApiReady) { ytStatus('notready'); loadYTApi(); return; }
+  if (!ytPlayer) {
+    ytPlayer = new YT.Player('ytplayer', {
+      width: '100%', height: '100%',
+      playerVars: { playsinline: 1, rel: 0, controls: 0, disablekb: 1, fs: 0, iv_load_policy: 3, modestbranding: 1 },
+      events: {
+        onReady: () => { ytPlayerReady = true; ytStatus('ready'); if (lastState) syncYT(lastState); },
+        onStateChange: e => {
+          if (e.data === 0) conn.send({ type: 'display', action: 'ytEnded' });
+          if (e.data === 1) { $('ytTap').hidden = true; clearTimeout(ytBlockTimer); }
+          ytStatus(YT_NAMES[e.data] || 'unstarted');
+        },
+        onError: e => conn.send({ type: 'display', action: 'ytError', code: e.data }),
+      },
+    });
+    return;
+  }
+  if (!ytPlayerReady) return;
+  const key = s.round + ':' + cur.c + '-' + cur.r;
+  if (key !== ytKey) { ytKey = key; ytNonce = cur.media.nonce; ytPlayer.cueVideoById(ytParams(cur)); $('ytTap').hidden = true; }
+  else if (cur.media.nonce !== ytNonce) {
+    ytNonce = cur.media.nonce; ytPlayer.cueVideoById(ytParams(cur));
+    if (actx) startYT(); else ytStatus('soundoff');
+    return;
+  }
+  const st = ytPlayer.getPlayerState();
+  if (cur.media.playing && !actx) ytStatus('soundoff');
+  if (cur.media.playing && actx) { if (st !== 1 && st !== 3 && st !== 0) startYT(); }
+  else if (!cur.media.playing && (st === 1 || st === 3)) ytPlayer.pauseVideo();
+}
+
+// ----- Nedtelling -----
+function tick() {
+  const el = document.getElementById('tnum');
+  if (!el || deadlineAt == null) return;
+  el.textContent = Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000));
+  const bar = document.getElementById('tbar');
+  if (bar) bar.classList.toggle('low', deadlineAt - Date.now() < 3000);
+}
+setInterval(tick, 200);
+function animateBar() {
+  tick();
+  const i = document.querySelector('#tbar i');
+  if (!i || deadlineAt == null) return;
+  const left = Math.max(0, deadlineAt - Date.now());
+  i.style.transition = 'none'; i.style.width = (left / (totalSecs * 1000) * 100) + '%';
+  i.offsetWidth; // tvinger reflow så animasjonen starter fra riktig bredde
+  i.style.transition = `width ${left}ms linear`; i.style.width = '0%';
+}
+
+const conn = connect(() => ({ role: 'display' }), msg => {
+  if (msg.type !== 'state') return;
+  const s = msg.state;
+  if (lastSeq !== null && s.event.seq > lastSeq) play(s.event.type);
+  lastSeq = s.event.seq;
+  lastState = s; syncMusic(s); syncYT(s);
+  $('lobby').hidden = s.started; $('gameView').hidden = !s.started; $('qrbox').hidden = !s.started;
+  $('teams').innerHTML = s.players.map(p => `<div class="t ${p.connected ? '' : 'muted'}">${esc(p.name)}</div>`).join('');
+  $('lobbyCount').textContent = s.players.length ? `${s.players.length} lag er med` : 'Venter på at lag skal bli med…';
+  $('scores').innerHTML = scoresInner(s);
+  if (!s.started) { $('overlay').hidden = true; return; }
+  $('roundName').textContent = s.rounds.length > 1 ? s.rounds[s.round] : '';
+  const cols = s.board.length, rows = Math.max(...s.board.map(c => c.clues.length));
+  const b = $('board');
+  b.style.setProperty('--cols', cols);
+  let html = s.board.map(c => `<div class="cat">${esc(c.name)}</div>`).join('');
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      const cl = s.board[c].clues[r];
+      html += cl ? `<div class="cell ${s.used[c + '-' + r] ? 'used' : ''}" style="display:flex;align-items:center;justify-content:center">${cl.value}</div>` : '<div></div>';
+    }
+  b.innerHTML = html;
+
+  const o = $('overlay'), cur = s.current;
+  if (!cur) { o.hidden = true; deadlineAt = null; return; }
+  o.hidden = false;
+  o.classList.toggle('padyt', !!cur.hasYt && !cur.q && !cur.img);
+  // serverNow brukes til å rette for klokkeforskjell mellom server og denne skjermen
+  deadlineAt = cur.deadline ? cur.deadline - (s.serverNow - Date.now()) : null;
+  totalSecs = cur.timerTotal || 0;
+  const who = s.players.find(p => p.id === cur.answering);
+  o.innerHTML = `${cur.double ? '<div class="dd">⭐ Dobbel poengsum ×2 ⭐</div>' : ''}
+    <div class="meta">${esc(cur.category)} · ${cur.value}</div>
+    <div class="q">${esc(cur.q) || (cur.hasYt ? '🎵 Lytt…' : '')}</div>
+    ${imgTag(cur.img)}
+    ${cur.hasYt && !actx ? '<div class="hint">🔇 Trykk «Slå på lyd» øverst til høyre for å spille musikken</div>' : ''}
+    ${cur.media && cur.media.error ? '<div class="hint" style="color:#ff8b8b">⚠️ Videoen kan ikke spilles (privat, ikke tillatt innebygd, eller ingen internett)</div>' : ''}
+    ${cur.a ? `<div class="a">${esc(cur.a)}</div>` : ''}
+    ${imgTag(cur.aImg)}
+    ${cur.phase === 'answering' && who ? `<div class="who">${cur.first ? '🎯' : '🔔'} ${esc(who.name)}${cur.first ? ' svarer først' : ''}</div>` : ''}
+    ${cur.phase === 'read' ? '<div class="hint">Les opp spørsmålet…</div>' : ''}
+    ${cur.phase === 'open' ? '<div class="hint">🟢 Buzzerne er åpne!</div>' : ''}
+    ${deadlineAt ? '<div class="tnum" id="tnum"></div><div class="tbar" id="tbar"><i></i></div>' : ''}
+    ${scoresHtml(s)}`;
+  animateBar();
+});
+</script>
+</body>
+</html>

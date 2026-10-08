@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Jeopardy – Spiller</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { display: flex; flex-direction: column; min-height: 100dvh; padding: 16px; gap: 14px; }
+  .center { margin: auto 0; display: flex; flex-direction: column; gap: 14px; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .me { font-weight: 700; } .pts { font-size: 1.6rem; font-weight: 900; color: var(--gold); }
+  .clue { background: var(--blue); border-radius: 14px; padding: 18px; text-align: center; }
+  .dd { background: var(--gold); color: #1a1400; font-weight: 900; border-radius: 99px; padding: .3em 1em; margin-bottom: 10px; display: inline-block; animation: ddpop .5s ease-out; }
+  @keyframes ddpop { from { transform: scale(.4); opacity: 0; } }
+  .clue .meta { color: var(--gold); font-weight: 800; text-transform: uppercase; font-size: .9rem; }
+  .clue .q { font-size: 1.4rem; font-weight: 700; margin-top: 8px; }
+  .clue .a { margin-top: 12px; color: var(--ok); font-weight: 800; font-size: 1.2rem; }
+  #buzz { flex: 1; min-height: 40dvh; border-radius: 50%; aspect-ratio: 1; max-height: 60vw; align-self: center;
+    width: min(80vw, 340px); font-size: 2rem; font-weight: 900; letter-spacing: .05em; background: var(--bad);
+    box-shadow: 0 10px 0 #8e1f14; transition: transform .05s; touch-action: manipulation; }
+  #buzz:active:not(:disabled) { transform: translateY(8px); box-shadow: 0 2px 0 #8e1f14; }
+  #buzz.ready { background: var(--ok); box-shadow: 0 10px 0 #1b7a43; animation: pulse 1s infinite; }
+  #buzz.ready:active { box-shadow: 0 2px 0 #1b7a43; }
+  #buzz.mine { background: var(--gold); color: #1a1400; box-shadow: 0 10px 0 #a37d0a; opacity: 1; }
+  @keyframes pulse { 50% { filter: brightness(1.2); } }
+  .status { text-align: center; font-size: 1.1rem; min-height: 1.5em; }
+  .mini { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; font-size: .85rem; }
+  .mini span { background: var(--panel); padding: 4px 10px; border-radius: 99px; }
+</style>
+</head>
+<body>
+<div id="conn" hidden>Mistet forbindelsen – kobler til på nytt…</div>
+
+<div id="join" class="center" hidden>
+  <h1 class="logo" style="font-size:3rem;text-align:center">Jeopardy!</h1>
+  <input id="name" maxlength="20" placeholder="Skriv navnet ditt" autocomplete="off">
+  <button id="joinBtn" class="gold" style="padding:1em">Bli med</button>
+  <div id="joinErr" class="muted" style="text-align:center"></div>
+</div>
+
+<div id="game" style="display:none;flex-direction:column;gap:14px;flex:1">
+  <div class="top"><span class="me" id="me"></span><span class="pts" id="pts">0</span></div>
+  <div id="clue"></div>
+  <button id="buzz" disabled>BUZZ!</button>
+  <div class="status" id="status"></div>
+  <div class="status" id="tleft" style="font-weight:800;color:var(--gold)"></div>
+  <div class="mini" id="mini"></div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+let pid = localStorage.getItem('jp_pid');
+let myName = localStorage.getItem('jp_name') || '';
+let state = null;
+const $ = id => document.getElementById(id);
+
+const conn = connect(() => ({ role: 'player', pid, name: myName }), msg => {
+  if (msg.type === 'joined') {
+    pid = msg.pid; myName = msg.name;
+    localStorage.setItem('jp_pid', pid); localStorage.setItem('jp_name', myName);
+    showGame();
+  } else if (msg.type === 'needName') {
+    $('join').hidden = false; $('game').style.display = 'none';
+  } else if (msg.type === 'nameTaken') {
+    $('join').hidden = false; $('game').style.display = 'none';
+    $('joinErr').textContent = 'Det navnet er allerede i bruk. Velg et annet.';
+  } else if (msg.type === 'kicked') {
+    localStorage.removeItem('jp_pid'); pid = null; location.reload();
+  } else if (msg.type === 'state') {
+    state = msg.state; render();
+  }
+});
+
+function showGame() { $('join').hidden = true; $('game').style.display = 'flex'; $('me').textContent = myName; render(); }
+
+$('joinBtn').onclick = () => {
+  const n = $('name').value.trim();
+  if (!n) { $('joinErr').textContent = 'Skriv inn et navn først'; return; }
+  myName = n; pid = null;
+  conn.send({ type: 'hello', role: 'player', pid: null, name: myName });
+};
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
+
+$('buzz').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (navigator.vibrate) navigator.vibrate(60);
+  conn.send({ type: 'player', action: 'buzz' });
+});
+
+let deadlineAt = null;
+function tickTimer() {
+  const el = $('tleft');
+  el.textContent = deadlineAt ? `⏱ ${Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000))} s` : '';
+}
+setInterval(tickTimer, 250);
+
+function render() {
+  if (!state || !pid) return;
+  const me = state.players.find(p => p.id === pid);
+  if (!me) return;
+  $('pts').textContent = me.score;
+  const cur = state.current;
+  const buzz = $('buzz');
+  buzz.className = ''; buzz.disabled = true;
+  let status = '';
+  const answeringP = cur && state.players.find(p => p.id === cur.answering);
+
+  if (!state.started) {
+    $('clue').innerHTML = '';
+    buzz.textContent = '⏳';
+    status = 'Du er med! Venter på at spillet starter…';
+  } else if (!cur) {
+    $('clue').innerHTML = '';
+    const ch = state.players.find(p => p.id === state.chooser);
+    status = ch ? (ch.id === pid ? '🎯 Det er DIN tur å velge!' : `${esc(ch.name)} velger neste spørsmål`) : 'Venter på at admin velger spørsmål…';
+    buzz.textContent = 'Venter';
+  } else {
+    $('clue').innerHTML = `<div class="clue">${cur.double ? '<div class="dd">⭐ Dobbel poengsum! ⭐</div>' : ''}<div class="meta">${esc(cur.category)} · ${cur.value}</div>
+      <div class="q">${esc(cur.q) || (cur.hasYt ? '🎵 Hør på storskjermen!' : '')}</div>${imgTag(cur.img)}${cur.a ? `<div class="a">Svar: ${esc(cur.a)}</div>${imgTag(cur.aImg)}` : ''}</div>`;
+    const locked = cur.lockedOut.includes(pid);
+    if (cur.phase === 'read') { buzz.textContent = 'Vent…'; status = 'Spørsmålet leses opp'; }
+    else if (cur.phase === 'open') {
+      if (locked) { buzz.textContent = 'Utestengt'; status = 'Du svarte feil på dette'; }
+      else { buzz.disabled = false; buzz.className = 'ready'; buzz.textContent = 'BUZZ!'; status = 'Trykk når du vet svaret!'; }
+    } else if (cur.phase === 'answering') {
+      if (cur.answering === pid) { buzz.className = 'mine'; buzz.textContent = 'DIN TUR!'; status = cur.first ? 'Du valgte ruten – du svarer først!' : 'Svar muntlig nå'; }
+      else { buzz.textContent = 'Låst'; status = cur.first ? `${esc(answeringP?.name || '?')} valgte ruten og svarer først` : `${esc(answeringP?.name || '?')} svarer…`; }
+    } else { buzz.textContent = 'Ferdig'; status = 'Riktig svar vises'; }
+  }
+  $('status').innerHTML = status;
+  deadlineAt = cur && cur.deadline ? cur.deadline - (state.serverNow - Date.now()) : null;
+  tickTimer();
+  $('mini').innerHTML = state.players.map(p =>
+    `<span style="${p.id === pid ? 'outline:1px solid var(--gold)' : ''}">${esc(p.name)}: ${p.score}</span>`).join('');
+}
+</script>
+</body>
+</html>

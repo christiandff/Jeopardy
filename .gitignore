@@ -1,0 +1,14 @@
+node_modules/
+
+# Egne data: brett, lagret spill, bilder og lyd (lages automatisk ved første oppstart)
+data/
+
+# Resultat fra lasttest
+test/load-report.txt
+
+# Midlertidige filer
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.claude/
