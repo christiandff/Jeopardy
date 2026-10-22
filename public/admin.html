@@ -2,7 +2,7 @@
 <html lang="no">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Jeopardy – Admin</title>
 <link rel="stylesheet" href="/style.css">
 <style>
@@ -39,17 +39,51 @@
   .imgrow label.btn { background: var(--blue); border-radius: 8px; padding: .3em .7em; cursor: pointer; font-weight: 600; }
   .imgrow input[type=file] { display: none; }
   .ed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); gap: 14px; }
-  @media (max-width: 600px) { .ed-grid { grid-template-columns: 1fr; } .clue-ed { grid-template-columns: 60px 1fr 34px; } .clue-ed input:nth-child(3) { grid-column: 2; } }
-  /* Mobil: kontrollknappene fast nederst, større trykkflater */
+  @media (max-width: 600px) { .ed-grid { grid-template-columns: 1fr; } .clue-ed { grid-template-columns: 76px 1fr 44px; } .clue-ed input { padding-left: .45em; padding-right: .3em; } .clue-ed input:nth-child(3) { grid-column: 2; } }
+  select { font: inherit; width: 100%; background: #0a1238; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: .55em .7em; }
+  button { touch-action: manipulation; }
+  /* Mobil: kontrollknappene fast nederst, større trykkflater, viktigste først */
   @media (max-width: 900px) {
-    body { padding-bottom: 130px; }
-    .cur .ctl { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; padding: 10px 12px 14px;
+    body { padding: 12px 12px 16px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+    body:has(#curCard .ctl) { padding-bottom: 200px; }
+    .layout { gap: 12px; }
+    .layout > div { display: contents !important; }
+    #curCard { order: 1; } #cPlayers { order: 2; } #cBoard { order: 3; } #cMode { order: 4; } #cGame { order: 5; }
+    #cTime { order: 6; } #cMusic { order: 7; } #cDiag { order: 8; } #cQr { order: 9; }
+    .kbd-hint { display: none; }
+    .card { padding: 12px; }
+    .bar { gap: 8px; margin-bottom: 12px; }
+    .bar h1 { font-size: 1.3rem !important; flex: 1 1 100%; }
+    .bar .tabs { flex: 1 1 100%; display: flex; gap: 8px; }
+    .bar .tabs button { flex: 1; }
+    .bar .sp { display: none; }
+    .bar > a { flex: 1.5; display: flex; } .bar > a button { width: 100%; white-space: nowrap; font-size: .9rem; }
+    #logout { flex: 1; align-self: stretch; }
+    button, select, input:not([type=checkbox]):not([type=file]) { min-height: 44px; }
+    input, select { font-size: 16px; }
+    input[type=checkbox] { width: 22px !important; height: 22px; flex: none; }
+    .cur .ctl { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; padding: 10px 12px calc(14px + env(safe-area-inset-bottom));
       background: var(--panel); border-top: 1px solid var(--line); box-shadow: 0 -6px 20px #000a; }
-    .cur .ctl button { flex: 1 1 28%; padding: .9em .4em; font-size: 1rem; }
+    .cur .ctl { gap: 6px; }
+    .cur .ctl button { flex: 1 1 28%; padding: .75em .4em; font-size: 1rem; }
     .cur .ctl #bClose { flex-basis: 100%; }
-    .player button { padding: .6em .8em; font-size: 1rem; }
-    .bar h1 { font-size: 1.3rem !important; }
-    .board .cell { min-height: 52px; }
+    .cur .q { font-size: 1.2rem; }
+    #toast { bottom: calc(170px + env(safe-area-inset-bottom)); width: max-content; max-width: 90vw; }
+    .board { gap: 4px; }
+    .board .cat { font-size: .62rem; letter-spacing: 0; padding: 8px 2px; min-height: 44px; overflow-wrap: anywhere; hyphens: auto; }
+    .board .cell { min-height: 52px; font-size: 1.15rem; }
+    .roundbar button { flex: 1 1 auto; }
+    .player { flex-wrap: wrap; row-gap: 6px; padding: 10px 0; }
+    .player .nm { flex: 1 1 calc(100% - 5em); min-width: 0; overflow-wrap: anywhere; }
+    .player button { flex: 1 1 20%; padding: .5em .4em; font-size: 1rem; }
+    #cQr .qr { display: none; }
+    #viewEdit { padding-bottom: 84px; }
+    #viewEdit > .bar { display: grid; grid-template-columns: 1fr 1fr; }
+    #viewEdit > .bar > .muted { grid-column: 1 / -1; }
+    #viewEdit > .bar label.btn { grid-column: 1 / -1; text-align: center; display: flex; align-items: center; justify-content: center; }
+    #saveBoard { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 30; box-shadow: 0 6px 24px #000c; }
+    .btabs input { width: 100%; flex: 1 1 100%; }
+    .cat-ed .head { flex-wrap: wrap; }
   }
   .roundbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
   .roundbar button.active { background: var(--gold); color: #1a1400; }
@@ -90,13 +124,21 @@
   <div id="viewGame" class="layout">
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card cur" id="curCard"></div>
-      <div class="card"><h3>Brett</h3><div id="roundBar" class="roundbar"></div><div class="board" id="board"></div></div>
+      <div class="card" id="cBoard"><h3>Brett</h3><div id="roundBar" class="roundbar"></div><div class="board" id="board"></div></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:16px">
-      <div class="card" style="display:flex;gap:14px;align-items:center"><div class="qr" id="qr" style="flex:none;width:130px"></div><div><h3 style="margin-bottom:4px">Bli med</h3><div class="muted" style="font-size:.9rem">Spillerne skanner QR-koden med mobilkameraet.</div><div id="qrurl" style="margin-top:6px;word-break:break-all;font-weight:700"></div></div></div>
-      <div class="card"><h3>Spillere</h3><div id="players"></div>
+      <div class="card" id="cQr" style="display:flex;gap:14px;align-items:center"><div class="qr" id="qr" style="flex:none;width:130px"></div><div><h3 style="margin-bottom:4px">Bli med</h3><div class="muted" style="font-size:.9rem">Spillerne skanner QR-koden med mobilkameraet.</div><div id="qrurl" style="margin-top:6px;word-break:break-all;font-weight:700"></div></div></div>
+      <div class="card" id="cPlayers"><h3>Spillere</h3><div id="players"></div>
       </div>
-      <div class="card"><h3>Tid (sekunder, 0 = av)</h3>
+      <div class="card" id="cMode"><h3>Spillmodus</h3>
+        <select id="gMode" aria-label="Spillmodus">
+          <option value="buzzer">Buzzer – buzzerne åpnes når spørsmålet vises</option>
+          <option value="turns">Tur for tur – lagene bytter på å velge og svare, uten buzzer</option>
+        </select>
+        <button id="penBtn" class="ghost" style="width:100%;margin-top:10px"></button>
+        <div class="muted" style="font-size:.8rem;margin-top:4px">I begge modusene åpnes buzzerne når et lag svarer feil, så de andre kan stjele poengene.</div>
+      </div>
+      <div class="card" id="cTime"><h3>Tid (sekunder, 0 = av)</h3>
         <div style="display:grid;grid-template-columns:1fr 80px;gap:8px;align-items:center">
           <label for="tBuzz">Tid til å buzze</label><input id="tBuzz" type="number" min="0" max="120">
           <label for="tAns">Tid til å svare</label><input id="tAns" type="number" min="0" max="120">
@@ -105,18 +147,18 @@
           <label for="tDbl">⭐ Dobbel-ruter per brett (0–5)</label><input id="tDbl" type="number" min="0" max="5"></div>
         <div class="muted" style="font-size:.8rem;margin-top:4px">Skjulte ruter som gir dobbel poengsum (også minus). Plasseres tilfeldig; velg antall <i>før</i> dere starter.</div>
         <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:.9rem"><input id="chFirst" type="checkbox" style="width:auto">Laget som valgte ruten svarer først (husregel)</label>
-        <div class="muted" style="font-size:.8rem">Av = vanlige regler: alle kan buzze, feil gir minus, og andre kan stjele poengene.</div>
-        <div class="muted" style="margin-top:8px;font-size:.8rem">Snarveier: <b>Mellomrom</b> åpne buzzer · <b>R</b> riktig · <b>F</b> feil · <b>V</b> vis svar · <b>Esc</b> lukk</div>
+        <div class="muted" style="font-size:.8rem">Av = vanlige regler: alle kan buzze, feil gir minuspoeng (halv verdi), og andre kan stjele poengene.</div>
+        <div class="muted kbd-hint" style="margin-top:8px;font-size:.8rem">Snarveier: <b>Mellomrom</b> åpne buzzer · <b>R</b> riktig · <b>F</b> feil · <b>V</b> vis svar · <b>Esc</b> lukk</div>
       </div>
-      <div class="card"><h3>Musikk</h3>
+      <div class="card" id="cMusic"><h3>Musikk</h3>
         <div class="muted" style="font-size:.8rem;margin-bottom:8px">Last opp egne lydfiler (mp3, ogg, wav, m4a). Spilles på storskjermen når lyden er slått på der.</div>
         <div id="music"></div>
       </div>
-      <div class="card"><h3>Får ikke mobilen kontakt?</h3>
+      <div class="card" id="cDiag"><h3>Får ikke mobilen kontakt?</h3>
         <button class="ghost" id="diagBtn">Vis nettverkstips</button>
         <div id="diag" hidden style="margin-top:10px;font-size:.9rem"></div>
       </div>
-      <div class="card"><h3>Spill</h3>
+      <div class="card" id="cGame"><h3>Spill</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="gold" id="startBtn"></button>
           <button class="ghost" id="resetBoard">Nullstill brett</button>
@@ -196,7 +238,9 @@ function renderMusic() {
   });
 }
 
-const sendTimers = () => act('setTimers', { buzzSecs: $('tBuzz').value, answerSecs: $('tAns').value, chooserFirst: $('chFirst').checked, doubles: $('tDbl').value });
+const sendTimers = () => act('setTimers', { buzzSecs: $('tBuzz').value, answerSecs: $('tAns').value, chooserFirst: $('chFirst').checked, doubles: $('tDbl').value, mode: $('gMode').value, penalty: window.__penalty !== false });
+$('penBtn').onclick = () => { window.__penalty = !(window.__penalty !== false); sendTimers(); };
+$('gMode').onchange = sendTimers;
 $('tBuzz').onchange = sendTimers; $('tAns').onchange = sendTimers; $('tDbl').onchange = sendTimers; $('chFirst').onchange = sendTimers;
 
 $('diagBtn').onclick = async () => {
@@ -237,6 +281,11 @@ function render() {
   for (const [id, v] of [['tBuzz', s.settings.buzzSecs], ['tAns', s.settings.answerSecs], ['tDbl', s.settings.doubles]])
     if (document.activeElement !== $(id)) $(id).value = v;
   $('chFirst').checked = !!s.settings.chooserFirst;
+  window.__penalty = s.settings.penalty;
+  $('penBtn').textContent = s.settings.penalty ? '➖ Minuspoeng: PÅ (feil svar = halv verdi)' : '➖ Minuspoeng: AV';
+  $('penBtn').className = s.settings.penalty ? 'ok' : 'bad';
+  $('chFirst').disabled = s.settings.mode === 'turns';
+  if (document.activeElement !== $('gMode')) $('gMode').value = s.settings.mode;
   const mk = JSON.stringify(s.audio);
   if (mk !== window.__audioKey && !$('music').contains(document.activeElement)) { window.__audioKey = mk; renderMusic(); }
   const sb = $('startBtn');
@@ -286,8 +335,10 @@ function render() {
     return;
   }
   const who = s.players.find(p => p.id === cur.answering);
-  const phaseTxt = { read: 'Les opp spørsmålet, trykk «Åpne buzzer» når klar', open: 'Buzzerne er åpne – venter på buzz…',
-    answering: cur.first ? 'Laget som valgte ruten svarer først. «Åpne buzzer» hopper over dem.' : 'Spiller har buzzet', revealed: 'Svar vist' }[cur.phase];
+  const turns = s.settings.mode === 'turns';
+  const phaseTxt = { read: turns ? 'Ingen lag er tilkoblet – trykk «Åpne buzzer»' : 'Les opp spørsmålet, trykk «Åpne buzzer» når klar',
+    open: turns ? 'Feil svar – buzzerne er åpne for stjeling' : 'Buzzerne er åpne – venter på buzz…',
+    answering: turns && cur.first ? 'Laget som har tur svarer. Feil svar åpner buzzerne for stjeling.' : cur.first ? 'Laget som valgte ruten svarer først. «Åpne buzzer» hopper over dem.' : 'Spiller har buzzet', revealed: 'Svar vist' }[cur.phase];
   card.innerHTML = `<h3>Aktivt spørsmål</h3>
     <div class="meta">${esc(cur.category)} · ${cur.value}${cur.double ? ' · <b style="color:var(--gold)">⭐ DOBBEL POENGSUM ×2</b>' : ''}</div>
     <div class="q">${esc(cur.q)}</div>${imgTag(cur.img)}

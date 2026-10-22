@@ -12,6 +12,9 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 const QUIET = !!process.env.QUIET;
 // Antall «dobbel poengsum»-ruter per brett (0–5). Kan endres i admin; env brukes bl.a. av testene.
+// Ventetid før buzzerne åpnes automatisk etter at en rute er valgt (tilsvarer zoom + flip på storskjermen). 0 = av.
+const AUTO_OPEN_MS = process.env.AUTO_OPEN_MS !== undefined && Number.isFinite(Number(process.env.AUTO_OPEN_MS))
+  ? Math.max(0, Number(process.env.AUTO_OPEN_MS)) : 2700;
 const DEFAULT_DOUBLES = process.env.DEFAULT_DOUBLES !== undefined && Number.isFinite(Number(process.env.DEFAULT_DOUBLES))
   ? Math.max(0, Math.min(5, Math.round(Number(process.env.DEFAULT_DOUBLES)))) : 2;
 const BOARD_FILE = path.join(DATA_DIR, 'board.json');
@@ -138,7 +141,7 @@ const game = {
   started: false,   // false = lobby/hovedmeny
   current: null,    // {c,r,phase,answering,lockedOut[],deadline}
   chooser: null,    // player id that picks next clue
-  settings: { buzzSecs: 15, answerSecs: 10, chooserFirst: false, doubles: DEFAULT_DOUBLES },
+  settings: { buzzSecs: 15, answerSecs: 10, chooserFirst: false, mode: 'buzzer', penalty: true, doubles: DEFAULT_DOUBLES },
   doubles: {},      // round -> ["c-r", …] hvilke ruter som er dobbel poengsum (skjult for spillerne)
   event: { seq: 0, type: null },   // brukes av storskjermen til lyder
   timer: null,
@@ -173,7 +176,7 @@ function loadState() {
     const st = isObj(s.settings) ? s.settings : {};
     const secsOr = (v, d) => (v !== null && v !== '' && Number.isFinite(Number(v))) ? Math.max(0, Math.min(120, Math.round(Number(v)))) : d;
     const dbl = Number(st.doubles);
-    game.settings = { buzzSecs: secsOr(st.buzzSecs, 15), answerSecs: secsOr(st.answerSecs, 10), chooserFirst: st.chooserFirst === true,
+    game.settings = { buzzSecs: secsOr(st.buzzSecs, 15), answerSecs: secsOr(st.answerSecs, 10), chooserFirst: st.chooserFirst === true, mode: st.mode === 'turns' || st.mode === 'pick' ? 'turns' : 'buzzer', penalty: st.penalty !== false,
       doubles: st.doubles !== null && st.doubles !== '' && Number.isFinite(dbl) ? Math.max(0, Math.min(5, Math.round(dbl))) : DEFAULT_DOUBLES };
     game.doubles = {};
     if (isObj(s.doubles)) for (const [k, v] of Object.entries(s.doubles)) {
@@ -239,7 +242,7 @@ function openBuzzers() {
 function markWrong(type = 'wrong') {
   const cur = game.current;
   const p = game.players[cur.answering];
-  if (p) p.score -= clueValue(cur);
+  if (p && game.settings.penalty) p.score -= Math.round(clueValue(cur) / 2); // feil svar koster halv verdi (kan skrus av)
   cur.lockedOut.push(cur.answering);
   cur.answering = null;
   emit(type);
@@ -268,6 +271,7 @@ function publicState() {
       id: p.id, name: p.name, score: p.score, connected: p.connected,
     })),
     chooser: game.chooser,
+    settings: { mode: game.settings.mode, penalty: game.settings.penalty, chooserFirst: game.settings.chooserFirst }, // vises i «Slik spiller du»
     current: cur && {
       c: cur.c, r: cur.r, phase: cur.phase, answering: cur.answering,
       lockedOut: cur.lockedOut, first: !!cur.first, value: clueValue(cur), double: !!cur.double, deadline: cur.deadline, timerTotal: cur.timerTotal,
@@ -311,8 +315,19 @@ function broadcast() {
   saveStateSoon();
 }
 
+// Neste tilkoblede lag etter `afterId` i spillerrekkefølgen (null hvis ingen er tilkoblet)
+function nextTurn(afterId) {
+  const list = Object.values(game.players);
+  const i = list.findIndex(p => p.id === afterId);
+  for (let k = 1; k <= list.length; k++) {
+    const p = list[(i + k + list.length) % list.length];
+    if (p.connected) return p;
+  }
+  return null;
+}
 function endClue() {
   clearTimer();
+  if (game.settings.mode === 'turns' && game.current?.turn) { const n = nextTurn(game.current.turn); if (n) game.chooser = n.id; }
   if (game.current) game.used[`${game.current.c}-${game.current.r}`] = true;
   game.current = null;
 }
@@ -334,8 +349,29 @@ function handleAdmin(msg) {
       game.current.double = game.doubles[game.round].includes(`${c}-${r}`);
       if (game.current.double) emit('double');
       // Laget som valgte ruten får første sjanse til å svare, uten å buzze
-      if (game.settings.chooserFirst && game.chooser && game.players[game.chooser]?.connected) {
+      if (game.settings.mode === 'buzzer' && game.settings.chooserFirst && game.chooser && game.players[game.chooser]?.connected) {
         game.current.phase = 'answering'; game.current.answering = game.chooser; game.current.first = true;
+      }
+      // Tur for tur: laget som har tur svarer uten å buzze. Svartimeren starter når storskjermen er ferdig med zoom og flip.
+      if (game.settings.mode === 'turns') {
+        const ch = game.players[game.chooser];
+        const turn = ch?.connected ? ch : nextTurn(game.chooser);
+        if (turn) {
+          const sel = game.current;
+          game.chooser = turn.id; sel.turn = turn.id; sel.phase = 'answering'; sel.answering = turn.id; sel.first = true;
+          if (!clueAt(c, r).yt) setTimeout(() => {
+            if (game.current === sel && sel.phase === 'answering' && sel.answering === turn.id) {
+              startTimer(game.settings.answerSecs, () => markWrong('timeout')); broadcast();
+            }
+          }, AUTO_OPEN_MS).unref();
+        }
+      }
+      // Buzzerne åpnes av seg selv når storskjermen er ferdig med zoom og flip (ikke for YouTube-ruter, der admin starter musikken)
+      if (AUTO_OPEN_MS > 0 && game.settings.mode === 'buzzer' && game.current.phase === 'read' && !clueAt(c, r).yt) {
+        const sel = game.current;
+        setTimeout(() => {
+          if (game.current === sel && sel.phase === 'read') { openBuzzers(); broadcast(); }
+        }, AUTO_OPEN_MS).unref();
       }
       break;
     }
@@ -355,7 +391,7 @@ function handleAdmin(msg) {
       // «who» = laget admin så svare. Har noen andre overtatt i mellomtiden, ignoreres kommandoen (ingen feil poeng).
       if (!cur || !cur.answering || (msg.who && msg.who !== cur.answering)) return;
       const p = game.players[cur.answering];
-      if (p) { p.score += clueValue(cur); game.chooser = p.id; }
+      if (p) { p.score += clueValue(cur); if (game.settings.mode !== 'turns') game.chooser = p.id; }
       emit('correct'); revealClue(cur);
       break;
     }
@@ -379,7 +415,9 @@ function handleAdmin(msg) {
       const before = game.settings.doubles;
       const dbl = msg.doubles === undefined || msg.doubles === null || msg.doubles === '' ? NaN : Number(msg.doubles);
       const doubles = Number.isFinite(dbl) ? Math.max(0, Math.min(5, Math.round(dbl))) : before;
-      game.settings = { buzzSecs: clamp(msg.buzzSecs), answerSecs: clamp(msg.answerSecs), chooserFirst: !!msg.chooserFirst, doubles };
+      game.settings = { buzzSecs: clamp(msg.buzzSecs), answerSecs: clamp(msg.answerSecs), chooserFirst: !!msg.chooserFirst, doubles,
+        mode: msg.mode === 'turns' || msg.mode === 'buzzer' ? msg.mode : game.settings.mode,
+        penalty: typeof msg.penalty === 'boolean' ? msg.penalty : game.settings.penalty };
       if (doubles !== before) { delete game.doubles[game.round]; if (game.started) ensureDoubles(game.round); } // ny plassering (ikke på brukte ruter)
       break;
     }

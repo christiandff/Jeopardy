@@ -134,7 +134,7 @@ describe('skadet state.json', () => {
     let srv = await startServer({ dir });
     let a = await mkAdmin(srv);
     assert.equal(a.state.round, 0); assert.equal(a.state.started, false); assert.equal(a.state.chooser, null);
-    assert.deepEqual(a.state.settings, { buzzSecs: 15, answerSecs: 0, chooserFirst: false, doubles: 0 }); // doubles: standard fra DEFAULT_DOUBLES i testmiljøet
+    assert.deepEqual(a.state.settings, { buzzSecs: 15, answerSecs: 0, chooserFirst: false, mode: 'buzzer', penalty: true, doubles: 0 }); // doubles: standard fra DEFAULT_DOUBLES i testmiljøet
     assert.deepEqual(a.state.players.map(p => [p.id, p.score]).sort(), [['a', 120], ['b', 0]]);
     assert.ok(a.state.players.every(p => typeof p.name === 'string' && p.name.length <= 20));
     a.act('start'); await a.waitState(s => s.started);

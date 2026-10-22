@@ -63,7 +63,7 @@ describe('dobbel poengsum', () => {
     await a.waitState(s => s.current && s.current.double); assert.equal(a.state.current.value, base * 2, 'spillerne ser dobbel verdi');
     admin.act('open'); await admin.waitState(s => s.current.phase === 'open');
     a.buzz(); await admin.waitState(s => s.current.answering === a.id); admin.act('wrong', { who: a.id });
-    await admin.waitState(s => s.current.lockedOut.includes(a.id)); assert.equal(score('A'), -base * 2);
+    await admin.waitState(s => s.current.lockedOut.includes(a.id)); assert.equal(score('A'), -base);
     b.buzz(); await admin.waitState(s => s.current.answering === b.id); admin.act('correct', { who: b.id });
     await admin.waitState(s => s.current.phase === 'revealed'); assert.equal(score('B'), base * 2);
     a.close(); b.close();

@@ -15,12 +15,14 @@
   .teams { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 1200px; }
   .teams .t { background: var(--panel); border: 2px solid var(--line); border-radius: 99px; padding: 10px 24px; font-size: 1.6rem; font-weight: 800; animation: pop .3s; }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
-  .footer { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; min-height: 52px; }
+  .footer { flex: none; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; min-height: 52px; }
   .footer .score { display: flex; gap: 14px; align-items: baseline; padding: 8px 18px; min-width: 0; }
   .footer .score .v { font-size: 1.5rem; }
   header { text-align: center; } header .logo { font-size: 2.4rem; }
-  .board { flex: 1; grid-auto-rows: 1fr; }
-  .board .cell { font-size: clamp(1.6rem, 4.5vw, 4rem); }
+  #gameView { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 16px; }
+  .board { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); grid-template-rows: auto; }
+  .board .cat { min-height: 0; padding: 8px 6px; }
+  .board .cell { font-size: clamp(1.6rem, 4.5vw, 4rem); min-height: 0; }
   #overlay { position: fixed; inset: 0; background: var(--blue); display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center; padding: 5vw; gap: 3vh; z-index: 10; }
   #overlay .meta { color: var(--gold); font-weight: 900; font-size: 2rem; text-transform: uppercase; letter-spacing: .1em; }
@@ -50,6 +52,15 @@
     letter-spacing: .06em; text-transform: uppercase; animation: ddpop .6s ease-out; box-shadow: 0 0 40px #ffcc3388; }
   @keyframes ddpop { from { transform: scale(.3) rotate(-8deg); opacity: 0; } 60% { transform: scale(1.15) rotate(2deg); } }
   #overlay .hint { font-size: 1.6rem; color: var(--muted); }
+  #flip { position: fixed; z-index: 11; display: flex; align-items: center; justify-content: center; background: var(--blue-hi);
+    color: var(--gold); font-weight: 900; font-family: Impact, "Arial Black", sans-serif; text-shadow: 2px 2px 0 #000; border-radius: 6px; box-shadow: 0 20px 60px #000c; backface-visibility: hidden;
+    transition: left 1.2s cubic-bezier(.3,.7,.2,1), top 1.2s cubic-bezier(.3,.7,.2,1), width 1.2s cubic-bezier(.3,.7,.2,1),
+      height 1.2s cubic-bezier(.3,.7,.2,1), border-radius 1.2s, font-size 1.2s, transform .5s ease-in, background .3s; }
+  #flip.full { background: var(--blue); border-radius: 0; }
+  #flip.turn { transform: perspective(1600px) rotateY(90deg); }
+  #overlay.unflip { animation: unflip .5s ease-out; }
+  @keyframes unflip { from { transform: perspective(1600px) rotateY(-90deg); } }
+  @media (prefers-reduced-motion: reduce) { #flip { transition: none; } #overlay.unflip { animation: none; } }
   #overlay .scores { position: absolute; bottom: 20px; left: 20px; right: 20px; justify-content: center; }
 </style>
 </head>
@@ -60,7 +71,8 @@
   <div class="join">
     <div class="qr qr-big" id="qrBig"></div>
     <div class="jtxt"><div class="h">Skann for å bli med</div><div class="muted" id="qrurlBig"></div>
-      <div class="muted" style="margin-top:14px" id="lobbyCount"></div></div>
+      <div class="muted" style="margin-top:14px" id="lobbyCount"></div>
+      <div class="muted" style="margin-top:6px">Trykk ? på mobilen for å se spillereglene</div></div>
   </div>
   <div class="teams" id="teams"></div>
 </div>
@@ -199,6 +211,32 @@ function syncYT(s) {
   else if (!cur.media.playing && (st === 1 || st === 3)) ytPlayer.pauseVideo();
 }
 
+// ----- Zoom og flip når en rute åpnes -----
+let shownClue = null, flipping = false;
+function flipOpen(c, r, value, dbl) {
+  const cell = document.querySelector(`#board .cell[data-c="${c}"][data-r="${r}"]`);
+  if (!cell || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const rect = cell.getBoundingClientRect();
+  const f = document.createElement('div');
+  f.id = 'flip'; f.textContent = value;
+  Object.assign(f.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px', height: rect.height + 'px',
+    fontSize: getComputedStyle(cell).fontSize });
+  document.body.appendChild(f);
+  flipping = true; $('overlay').hidden = true;
+  const done = () => {
+    f.remove(); flipping = false;
+    const o = $('overlay'); o.hidden = false;
+    o.classList.remove('unflip'); o.offsetWidth; o.classList.add('unflip');
+    animateBar();
+  };
+  f.offsetWidth; // reflow så overgangen starter fra cellen
+  setTimeout(() => {
+    f.classList.add('full');
+    Object.assign(f.style, { left: '0px', top: '0px', width: '100vw', height: '100vh', fontSize: '14vw' });
+    setTimeout(() => { f.classList.add("turn"); setTimeout(done, 500); }, 1300);
+  }, 400); // kort pause så man ser hvilken rute som er valgt
+}
+
 // ----- Nedtelling -----
 function tick() {
   const el = document.getElementById('tnum');
@@ -224,6 +262,7 @@ const conn = connect(() => ({ role: 'display' }), msg => {
   if (lastSeq !== null && s.event.seq > lastSeq) play(s.event.type);
   lastSeq = s.event.seq;
   lastState = s; syncMusic(s); syncYT(s);
+  if (!s.started) shownClue = null;
   $('lobby').hidden = s.started; $('gameView').hidden = !s.started; $('qrbox').hidden = !s.started;
   $('teams').innerHTML = s.players.map(p => `<div class="t ${p.connected ? '' : 'muted'}">${esc(p.name)}</div>`).join('');
   $('lobbyCount').textContent = s.players.length ? `${s.players.length} lag er med` : 'Venter på at lag skal bli med…';
@@ -237,13 +276,15 @@ const conn = connect(() => ({ role: 'display' }), msg => {
   for (let r = 0; r < rows; r++)
     for (let c = 0; c < cols; c++) {
       const cl = s.board[c].clues[r];
-      html += cl ? `<div class="cell ${s.used[c + '-' + r] ? 'used' : ''}" style="display:flex;align-items:center;justify-content:center">${cl.value}</div>` : '<div></div>';
+      html += cl ? `<div class="cell ${s.used[c + '-' + r] ? 'used' : ''}" data-c="${c}" data-r="${r}" style="display:flex;align-items:center;justify-content:center">${cl.value}</div>` : '<div></div>';
     }
   b.innerHTML = html;
 
   const o = $('overlay'), cur = s.current;
-  if (!cur) { o.hidden = true; deadlineAt = null; return; }
-  o.hidden = false;
+  if (!cur) { o.hidden = true; deadlineAt = null; shownClue = null; return; }
+  const clueKey = s.round + ':' + cur.c + ':' + cur.r;
+  if (clueKey !== shownClue) { shownClue = clueKey; flipOpen(cur.c, cur.r, cur.value, cur.double); }
+  o.hidden = flipping;
   o.classList.toggle('padyt', !!cur.hasYt && !cur.q && !cur.img);
   // serverNow brukes til å rette for klokkeforskjell mellom server og denne skjermen
   deadlineAt = cur.deadline ? cur.deadline - (s.serverNow - Date.now()) : null;

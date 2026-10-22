@@ -36,7 +36,7 @@ describe('lagring og gjenoppretting', () => {
     assert.deepEqual(Object.keys(s.used), ['1-1']);
     assert.equal(s.players.find(p => p.name === 'Alfa').score, 100);
     assert.equal(s.chooser, a.id);
-    assert.deepEqual(s.settings, { buzzSecs: 7, answerSecs: 8, chooserFirst: true, doubles: 0 });
+    assert.deepEqual(s.settings, { buzzSecs: 7, answerSecs: 8, chooserFirst: true, mode: 'buzzer', penalty: true, doubles: 0 });
     assert.ok(s.players.every(p => p.connected === false), 'lagene er frakoblet til de kobler til igjen');
     admin.act('flip'); await admin.waitState(s => s.round === 0 && s.used['0-0'], 3000, 'brukt rute på brett 1 er husket');
 

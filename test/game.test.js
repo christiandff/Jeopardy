@@ -46,6 +46,45 @@ describe('spillregler', () => {
     closeAll();
   });
 
+  it('modus «Tur for tur»: laget med tur svarer uten å buzze, feil svar åpner buzzerne for stjeling, så er det neste lag sin tur', async () => {
+    const [a, b] = await open('A', 'B');
+    admin.act('setTimers', { buzzSecs: 0, answerSecs: 0, chooserFirst: false, mode: 'turns' });
+    await admin.waitState(s => s.settings.mode === 'turns');
+    admin.act('start'); await startClue(0, 1); // 200
+    assert.equal(admin.state.current.phase, 'answering');
+    assert.equal(admin.state.current.answering, a.id, 'første lag har tur uten å buzze');
+    b.buzz(); await sleep(150);
+    assert.equal(admin.state.current.answering, a.id, 'buzz fra andre lag gjør ingenting mens turlaget svarer');
+    admin.act('wrong'); await admin.waitState(s => s.current.phase === 'open' && s.current.lockedOut.includes(a.id));
+    assert.equal(score('A'), -100);
+    a.buzz(); await sleep(150);
+    assert.equal(admin.state.current.answering, null, 'utestengt lag kan ikke buzze');
+    b.buzz(); await admin.waitState(s => s.current.answering === b.id);
+    admin.act('correct'); await admin.waitState(s => s.current.phase === 'revealed');
+    assert.equal(score('B'), 200);
+    admin.act('close'); await admin.waitState(s => !s.current);
+    assert.equal(admin.state.chooser, b.id, 'turen går videre til neste lag selv om B stjal');
+    await startClue(1, 0);
+    assert.equal(admin.state.current.answering, b.id);
+    admin.act('correct'); await admin.waitState(s => s.current.phase === 'revealed');
+    admin.act('close'); await admin.waitState(s => !s.current);
+    assert.equal(admin.state.chooser, a.id, 'rundt til første lag igjen');
+    admin.act('setTimers', { buzzSecs: 0, answerSecs: 0, chooserFirst: false, mode: 'buzzer' });
+    closeAll();
+  });
+
+  it('minuspoeng kan skrus av', async () => {
+    const [a, b] = await open('A', 'B');
+    admin.act('setTimers', { buzzSecs: 0, answerSecs: 0, chooserFirst: false, penalty: false });
+    await admin.waitState(s => s.settings.penalty === false);
+    admin.act('start'); await startClue(0, 1); admin.act('open'); await admin.waitState(s => s.current.phase === 'open');
+    a.buzz(); await admin.waitState(s => s.current.answering === a.id);
+    admin.act('wrong'); await admin.waitState(s => s.current.lockedOut.includes(a.id));
+    assert.equal(score('A'), 0, 'ingen minuspoeng når det er skrudd av');
+    admin.act('setTimers', { buzzSecs: 0, answerSecs: 0, chooserFirst: false, penalty: true });
+    closeAll();
+  });
+
   it('feil svar: minuspoeng, utestengt, andre kan stjele for pluss og får valgretten', async () => {
     const [a, b, c] = await open('A', 'B', 'C');
     admin.act('start'); await startClue(0, 2); // 300
@@ -53,7 +92,7 @@ describe('spillregler', () => {
     a.buzz(); await admin.waitState(s => s.current.answering === a.id);
     admin.act('wrong');
     await admin.waitState(s => s.current.phase === 'open' && s.current.lockedOut.includes(a.id));
-    assert.equal(score('A'), -300);
+    assert.equal(score('A'), -150);
     a.buzz(); await sleep(150);
     assert.equal(admin.state.current.answering, null, 'utestengt spiller kan ikke buzze');
     b.buzz(); await admin.waitState(s => s.current.answering === b.id);
@@ -74,7 +113,7 @@ describe('spillregler', () => {
     admin.act('correct', { who: a.id }); admin.act('wrong', { who: a.id }); // admin så fortsatt A på skjermen
     await sleep(250);
     assert.equal(admin.state.current.answering, b.id, 'B svarer fortsatt');
-    assert.equal(score('B'), 0); assert.equal(score('A'), -200);
+    assert.equal(score('B'), 0); assert.equal(score('A'), -100);
     admin.act('correct', { who: b.id }); await admin.waitState(s => s.current.phase === 'revealed');
     assert.equal(score('B'), 200);
     closeAll();
@@ -117,7 +156,7 @@ describe('spillregler', () => {
     admin.act('start'); await startClue(0, 0); admin.act('open'); await admin.waitState(s => s.current.phase === 'open');
     a.buzz(); await admin.waitState(s => s.current.phase === 'answering');
     await admin.waitState(s => s.current.phase === 'open' && s.current.lockedOut.includes(a.id), 2500, 'svar-timeout');
-    assert.equal(score('A'), -100);
+    assert.equal(score('A'), -50);
     b.buzz(); await admin.waitState(s => s.current.answering === b.id);
     closeAll();
   });
