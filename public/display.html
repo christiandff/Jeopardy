@@ -215,7 +215,7 @@ function syncYT(s) {
 let shownClue = null, flipping = false;
 function flipOpen(c, r, value, dbl) {
   const cell = document.querySelector(`#board .cell[data-c="${c}"][data-r="${r}"]`);
-  if (!cell || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!cell || matchMedia('(prefers-reduced-motion: reduce)').matches) { conn.send({ type: 'display', action: 'flipDone' }); return; }
   const rect = cell.getBoundingClientRect();
   const f = document.createElement('div');
   f.id = 'flip'; f.textContent = value;
@@ -228,6 +228,7 @@ function flipOpen(c, r, value, dbl) {
     const o = $('overlay'); o.hidden = false;
     o.classList.remove('unflip'); o.offsetWidth; o.classList.add('unflip');
     animateBar();
+    conn.send({ type: 'display', action: 'flipDone' }); // spillerne får spørsmålet og buzzerne åpnes nå
   };
   f.offsetWidth; // reflow så overgangen starter fra cellen
   setTimeout(() => {
@@ -292,7 +293,7 @@ const conn = connect(() => ({ role: 'display' }), msg => {
   const who = s.players.find(p => p.id === cur.answering);
   o.innerHTML = `${cur.double ? '<div class="dd">⭐ Dobbel poengsum ×2 ⭐</div>' : ''}
     <div class="meta">${esc(cur.category)} · ${cur.value}</div>
-    <div class="q">${esc(cur.q) || (cur.hasYt ? '🎵 Lytt…' : '')}</div>
+    <div class="q">${cur.q ? '' : cur.hasYt ? '🎵 Lytt…' : ''}</div>
     ${imgTag(cur.img)}
     ${cur.hasYt && !actx ? '<div class="hint">🔇 Trykk «Slå på lyd» øverst til høyre for å spille musikken</div>' : ''}
     ${cur.media && cur.media.error ? '<div class="hint" style="color:#ff8b8b">⚠️ Videoen kan ikke spilles (privat, ikke tillatt innebygd, eller ingen internett)</div>' : ''}
@@ -303,6 +304,7 @@ const conn = connect(() => ({ role: 'display' }), msg => {
     ${cur.phase === 'open' ? '<div class="hint">🟢 Buzzerne er åpne!</div>' : ''}
     ${deadlineAt ? '<div class="tnum" id="tnum"></div><div class="tbar" id="tbar"><i></i></div>' : ''}
     ${scoresHtml(s)}`;
+  if (cur.q) typeQ('#overlay .q', cur.q, clueKey, () => !flipping);
   animateBar();
 });
 </script>

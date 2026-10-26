@@ -239,6 +239,17 @@ function openBuzzers() {
   cur.phase = 'open'; cur.answering = null; cur.first = false;
   startTimer(game.settings.buzzSecs, () => { revealClue(cur); emit('timeout'); });
 }
+// Storskjermen har vist ruten ferdig: spørsmålet slippes til spillerne og buzzerne åpnes
+function showClue(cur) {
+  if (!cur.pending) return;
+  cur.pending = false;
+  if (game.settings.mode === 'buzzer' && cur.phase === 'read' && !clueAt(cur.c, cur.r).yt) openBuzzers();
+}
+// Musikken startes: buzzerne åpnes samtidig (og spørsmålet slippes til spillerne hvis det ennå ikke er vist)
+function openWithMusic(cur) {
+  cur.pending = false;
+  if (game.settings.mode === 'buzzer' && cur.phase === 'read') openBuzzers();
+}
 function markWrong(type = 'wrong') {
   const cur = game.current;
   const p = game.players[cur.answering];
@@ -276,10 +287,11 @@ function publicState() {
       c: cur.c, r: cur.r, phase: cur.phase, answering: cur.answering,
       lockedOut: cur.lockedOut, first: !!cur.first, value: clueValue(cur), double: !!cur.double, deadline: cur.deadline, timerTotal: cur.timerTotal,
       category: curBoard().categories[cur.c].name,
-      q: clue.q,
-      hasYt: !!clue.yt,
+      pending: !!cur.pending, // storskjermen har ikke vist ruten ferdig ennå: spørsmålet holdes igjen fra spillerne
+      q: cur.pending ? undefined : clue.q,
+      hasYt: !cur.pending && !!clue.yt,
       media: cur.media,
-      img: clue.img || undefined,
+      img: cur.pending ? undefined : clue.img || undefined,
       aImg: cur.phase === 'revealed' ? clue.aImg || undefined : undefined,
       a: cur.phase === 'revealed' ? clue.a : undefined,
     },
@@ -288,7 +300,7 @@ function publicState() {
 // Storskjermen får video-ID (spillerne får den ikke, så de ikke kan slå opp sangen)
 function displayState() {
   const s = publicState();
-  if (game.current) s.current.yt = ytInfo(clueAt(game.current.c, game.current.r));
+  if (game.current) { const cl = clueAt(game.current.c, game.current.r); Object.assign(s.current, { q: cl.q, hasYt: !!cl.yt, img: cl.img || undefined, yt: ytInfo(cl) }); }
   return s;
 }
 function adminState() {
@@ -299,6 +311,7 @@ function adminState() {
   if (game.current) {
     const cl = clueAt(game.current.c, game.current.r);
     s.current.a = cl.a; s.current.aImg = cl.aImg || undefined; s.current.yt = ytInfo(cl);
+    s.current.q = cl.q; s.current.hasYt = !!cl.yt; s.current.img = cl.img || undefined;
   }
   s.fullBoard = { boards };
   return s;
@@ -366,12 +379,12 @@ function handleAdmin(msg) {
           }, AUTO_OPEN_MS).unref();
         }
       }
-      // Buzzerne åpnes av seg selv når storskjermen er ferdig med zoom og flip (ikke for YouTube-ruter, der admin starter musikken)
-      if (AUTO_OPEN_MS > 0 && game.settings.mode === 'buzzer' && game.current.phase === 'read' && !clueAt(c, r).yt) {
+      // Spillerne får ikke spørsmålet før storskjermen er ferdig med zoom og flip (melder «flipDone»).
+      // Buzzerne åpnes samtidig (ikke for YouTube-ruter, der admin starter musikken). Reservetimer hvis ingen storskjerm er koblet til.
+      if (AUTO_OPEN_MS > 0) {
         const sel = game.current;
-        setTimeout(() => {
-          if (game.current === sel && sel.phase === 'read') { openBuzzers(); broadcast(); }
-        }, AUTO_OPEN_MS).unref();
+        sel.pending = true;
+        setTimeout(() => { if (game.current === sel && sel.pending) { showClue(sel); broadcast(); } }, AUTO_OPEN_MS + 1500).unref();
       }
       break;
     }
@@ -379,13 +392,13 @@ function handleAdmin(msg) {
       if (cur && (cur.phase === 'read' || cur.phase === 'answering')) openBuzzers();
       break;
     case 'mediaPlay':
-      if (cur && clueAt(cur.c, cur.r).yt) { cur.media.playing = true; cur.media.error = null; }
+      if (cur && clueAt(cur.c, cur.r).yt) { cur.media.playing = true; cur.media.error = null; openWithMusic(cur); }
       break;
     case 'mediaPause':
       if (cur) cur.media.playing = false;
       break;
     case 'mediaRestart':
-      if (cur && clueAt(cur.c, cur.r).yt) { cur.media.nonce++; cur.media.playing = true; cur.media.error = null; }
+      if (cur && clueAt(cur.c, cur.r).yt) { cur.media.nonce++; cur.media.playing = true; cur.media.error = null; openWithMusic(cur); }
       break;
     case 'correct': {
       // «who» = laget admin så svare. Har noen andre overtatt i mellomtiden, ignoreres kommandoen (ingen feil poeng).
@@ -720,7 +733,8 @@ wss.on('connection', (ws, req) => {
       const media = game.current.media;
       if (msg.action === 'ytEnded') media.playing = false;
       else if (msg.action === 'ytError') { media.playing = false; media.error = Number(msg.code) || -1; }
-      else if (msg.action === 'ytStatus' && YT_STATUSES.has(msg.status)) media.status = msg.status;
+      else if (msg.action === 'flipDone') showClue(game.current);
+      else if (msg.action === 'ytStatus'&& YT_STATUSES.has(msg.status)) media.status = msg.status;
     }
     } catch (err) { console.error('Feil i meldingshåndtering:', err); return; }
     broadcast();

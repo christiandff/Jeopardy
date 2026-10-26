@@ -26,5 +26,24 @@ function connect(hello, onMessage) {
 }
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Skriver spørsmålet bokstav for bokstav i elementet som `sel` peker på. Klientene bygger siden på nytt ved hver state-melding,
+// så fremdriften huskes per `key` og elementet slås opp på nytt for hvert tegn. `ready()` kan holde effekten igjen (f.eks. under flip).
+const typer = { key: null, n: 0, timer: null };
+function typeQ(sel, text, key, ready = () => true, ms = 35) {
+  if (typer.key !== key) { typer.key = key; typer.n = 0; }
+  clearInterval(typer.timer);
+  const paint = () => {
+    const el = document.querySelector(sel); if (!el) return;
+    el.innerHTML = esc(text.slice(0, typer.n)) + `<span style="visibility:hidden">${esc(text.slice(typer.n))}</span>`; // skjult rest så teksten ikke hopper
+  };
+  paint();
+  if (typer.n >= text.length || matchMedia('(prefers-reduced-motion: reduce)').matches) { typer.n = text.length; paint(); return; }
+  typer.timer = setInterval(() => {
+    if (!ready()) return;
+    typer.n++; paint();
+    if (typer.n >= text.length) clearInterval(typer.timer);
+  }, ms);
+}
+
 async function loadJoin() { return (await fetch('/api/join')).json(); }
 const imgTag = (n, cls = 'clue-img') => n ? `<img class="${cls}" src="/uploads/${esc(n)}" alt="">` : '';

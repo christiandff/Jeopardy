@@ -175,7 +175,8 @@ function render() {
     buzz.textContent = 'Venter';
   } else {
     $('clue').innerHTML = `<div class="clue">${cur.double ? '<div class="dd">⭐ Dobbel poengsum! ⭐</div>' : ''}<div class="meta">${esc(cur.category)} · ${cur.value}</div>
-      <div class="q">${esc(cur.q) || (cur.hasYt ? '🎵 Hør på storskjermen!' : '')}</div>${imgTag(cur.img)}${cur.a ? `<div class="a">Svar: ${esc(cur.a)}</div>${imgTag(cur.aImg)}` : ''}</div>`;
+      <div class="q">${cur.pending ? '👀 Se på storskjermen…' : cur.q ? '' : cur.hasYt ? '🎵 Hør på storskjermen!' : ''}</div>${imgTag(cur.img)}${cur.a ? `<div class="a">Svar: ${esc(cur.a)}</div>${imgTag(cur.aImg)}` : ''}</div>`;
+    if (cur.q) typeQ('#clue .q', cur.q, state.round + ':' + cur.c + ':' + cur.r);
     const locked = cur.lockedOut.includes(pid);
     if (cur.phase === 'read') { buzz.textContent = 'Vent…'; status = 'Spørsmålet leses opp'; }
     else if (cur.phase === 'open') {

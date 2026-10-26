@@ -32,6 +32,22 @@ describe('spillregler', () => {
     admin.act('lobby'); await admin.waitState(s => !s.started);
   });
 
+  it('spørsmålet holdes igjen fra spillerne til storskjermen melder flipDone, og da åpnes buzzerne', async () => {
+    const [p] = await open('Tidlig'); const d = await mkDisplay(srv);
+    admin.act('start'); await startClue(0, 0);
+    await p.waitState(s => s.current);
+    assert.equal(p.state.current.pending, true);
+    assert.equal(p.state.current.q, undefined);
+    assert.equal(p.state.current.phase, 'read');
+    await d.waitState(s => s.current && s.current.q);
+    assert.ok(d.state.current.q, 'storskjermen får spørsmålet med en gang');
+    d.send({ type: 'display', action: 'flipDone' });
+    await p.waitState(s => s.current.phase === 'open');
+    assert.ok(p.state.current.q);
+    assert.equal(p.state.current.pending, false);
+    d.close(); closeAll();
+  });
+
   it('buzz-kappløp: 20 spillere buzzer samtidig, nøyaktig én vinner', async () => {
     const ps = await open(...Array.from({ length: 20 }, (_, i) => 'P' + i));
     admin.act('start'); await startClue(0, 0); admin.act('open');
@@ -352,6 +368,9 @@ describe('YouTube-ruter', () => {
     assert.deepEqual(admin.state.current.yt, { id: ID, start: 5, end: 30, hide: true });
     assert.deepEqual(d.state.current.yt, { id: ID, start: 5, end: 30, hide: true });
     assert.equal(p.state.current.yt, undefined);
+    assert.equal(p.state.current.hasYt, false); // holdes igjen til storskjermen er ferdig med flip
+    d.send({ type: 'display', action: 'flipDone' });
+    await p.waitState(s => s.current.hasYt);
     assert.equal(p.state.current.hasYt, true);
     assert.ok(!JSON.stringify(p.state).includes(ID), 'spillerens state inneholder ikke video-ID');
     p.close(); d.close();
@@ -360,8 +379,10 @@ describe('YouTube-ruter', () => {
   it('avspilling styres fra admin og pauses når noen buzzer', async () => {
     const p = await mkPlayer(srv, 'Buzzer');
     const media = () => admin.state.current.media;
+    assert.equal(admin.state.current.phase, 'read');
     admin.act('mediaPlay'); await admin.waitState(s => s.current.media.playing);
-    await p.waitState(s => s.current.media.playing);
+    await p.waitState(s => s.current.media.playing && s.current.phase === 'open'); // buzzerne åpner når musikken starter
+    assert.equal(p.state.current.hasYt, true);
     admin.act('mediaPause'); await admin.waitState(s => !s.current.media.playing);
     admin.act('mediaRestart'); await admin.waitState(s => s.current.media.playing && s.current.media.nonce === 1);
     admin.act('open'); await admin.waitState(s => s.current.phase === 'open');
